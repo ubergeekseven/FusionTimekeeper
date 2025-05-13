@@ -14,7 +14,7 @@
             border-radius: 8px;
             box-shadow: 0 2px 8px rgba(0,0,0,0.08);
             padding: 24px 20px 20px 20px;
-            max-width: 320px;
+            max-width: 340px;
             margin: 0 auto;
         }
         h2 {
@@ -58,43 +58,222 @@
             font-size: 0.9em;
             color: #888;
         }
+        .section {
+            margin-top: 18px;
+        }
+        .dropdown {
+            width: 100%;
+            padding: 6px;
+            border-radius: 4px;
+            border: 1px solid #ccc;
+            margin-bottom: 8px;
+        }
+        .session-list {
+            background: #f4f4f4;
+            border-radius: 4px;
+            padding: 8px;
+            margin-bottom: 8px;
+            font-size: 0.98em;
+        }
+        .session-list ul {
+            margin: 0;
+            padding-left: 18px;
+        }
+        .session-list li {
+            margin-bottom: 2px;
+        }
+        .project-input {
+            width: 100%;
+            padding: 6px;
+            border-radius: 4px;
+            border: 1px solid #ccc;
+            margin-bottom: 8px;
+        }
+        .overall-total {
+            margin-top: 8px;
+            font-weight: bold;
+            color: #1976D2;
+            text-align: right;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <h2>Fusion Timekeeper</h2>
+        <input class="project-input" id="projectName" placeholder="Project Name (optional)" />
         <div class="time-display" id="timeDisplay">00:00:00</div>
         <div class="button-row">
             <button class="button" id="startBtn">Start</button>
             <button class="button" id="stopBtn" disabled>Stop</button>
             <button class="button" id="resetBtn" disabled>Reset</button>
         </div>
-        <div class="footer">Session time only. Data is not saved.</div>
+        <div class="section">
+            <label for="dateDropdown"><b>Session Dates:</b></label>
+            <select class="dropdown" id="dateDropdown"></select>
+            <div class="session-list" id="sessionList"></div>
+            <div class="overall-total" id="overallTotal"></div>
+        </div>
+        <div class="button-row" style="margin-top:10px;">
+            <button class="button" id="saveBtn">Save</button>
+            <button class="button" id="importBtn">Import JSON</button>
+            <input type="file" id="importFile" style="display:none;" accept="application/json" />
+        </div>
+        <div class="footer">Session time is stored in memory. Save to avoid losing your work.</div>
     </div>
     <script>
+        // --- Data Model ---
+        let data = {
+            projectName: '',
+            sessions: [] // {date: 'YYYY-MM-DD', times: [seconds, ...]}
+        };
         let startTime = null;
         let elapsed = 0;
         let timerInterval = null;
+        let currentDate = getToday();
+        let fileHandle = null; // For File System Access API
+        let autoSaveInterval = null;
 
+        // --- DOM Elements ---
         const timeDisplay = document.getElementById('timeDisplay');
         const startBtn = document.getElementById('startBtn');
         const stopBtn = document.getElementById('stopBtn');
         const resetBtn = document.getElementById('resetBtn');
+        const dateDropdown = document.getElementById('dateDropdown');
+        const sessionList = document.getElementById('sessionList');
+        const projectNameInput = document.getElementById('projectName');
+        const saveBtn = document.getElementById('saveBtn');
+        const importBtn = document.getElementById('importBtn');
+        const importFile = document.getElementById('importFile');
+        const overallTotal = document.getElementById('overallTotal');
 
-        function updateDisplay() {
-            let total = elapsed;
-            if (startTime) {
-                total += Date.now() - startTime;
-            }
-            const hours = Math.floor(total / 3600000);
-            const minutes = Math.floor((total % 3600000) / 60000);
-            const seconds = Math.floor((total % 60000) / 1000);
-            timeDisplay.textContent = `${hours.toString().padStart(2, '0')}` +
+        // --- Utility Functions ---
+        function getToday() {
+            const d = new Date();
+            return d.toISOString().slice(0, 10);
+        }
+        function formatTime(sec) {
+            const hours = Math.floor(sec / 3600);
+            const minutes = Math.floor((sec % 3600) / 60);
+            const seconds = sec % 60;
+            return `${hours.toString().padStart(2, '0')}` +
                 `:${minutes.toString().padStart(2, '0')}` +
                 `:${seconds.toString().padStart(2, '0')}`;
         }
-
-        function startTimer() {
+        function getOverallTotal() {
+            return data.sessions.reduce((sum, session) => {
+                return sum + session.times.reduce((s, t) => s + t, 0);
+            }, 0);
+        }
+        function updateDisplay() {
+            let total = elapsed;
+            if (startTime) {
+                total += Math.floor((Date.now() - startTime) / 1000);
+            }
+            timeDisplay.textContent = formatTime(total);
+        }
+        function updateDropdown() {
+            // Populate dropdown with all dates
+            dateDropdown.innerHTML = '';
+            data.sessions.forEach((s, idx) => {
+                const opt = document.createElement('option');
+                opt.value = s.date;
+                opt.textContent = s.date;
+                if (s.date === currentDate) opt.selected = true;
+                dateDropdown.appendChild(opt);
+            });
+        }
+        function updateSessionList() {
+            // Show all times for selected date
+            const session = data.sessions.find(s => s.date === currentDate);
+            if (!session) {
+                sessionList.innerHTML = '<i>No sessions for this date.</i>';
+            } else {
+                let html = '<ul>';
+                let total = 0;
+                session.times.forEach((t, i) => {
+                    html += `<li>Session ${i+1}: ${formatTime(t)}</li>`;
+                    total += t;
+                });
+                html += '</ul>';
+                html += `<b>Total: ${formatTime(total)}</b>`;
+                sessionList.innerHTML = html;
+            }
+            // Show overall total
+            let overall = getOverallTotal();
+            overallTotal.innerHTML = `Overall Total: ${formatTime(overall)}`;
+        }
+        function saveSession(seconds) {
+            let session = data.sessions.find(s => s.date === currentDate);
+            if (!session) {
+                session = {date: currentDate, times: []};
+                data.sessions.push(session);
+                data.sessions.sort((a, b) => a.date.localeCompare(b.date));
+            }
+            session.times.push(seconds);
+            updateDropdown();
+            updateSessionList();
+            autoSave();
+        }
+        function resetTimerUI() {
+            elapsed = 0;
+            startTime = null;
+            clearInterval(timerInterval);
+            updateDisplay();
+            startBtn.disabled = false;
+            stopBtn.disabled = true;
+            resetBtn.disabled = true;
+        }
+        // --- File Save/Load Functions ---
+        async function saveToFile() {
+            try {
+                const exportData = JSON.stringify(data, null, 2);
+                if ('showSaveFilePicker' in window) {
+                    // File System Access API supported
+                    if (!fileHandle) {
+                        fileHandle = await window.showSaveFilePicker({
+                            suggestedName: (data.projectName ? data.projectName + '_' : '') + 'FusionTimekeeper.json',
+                            types: [{
+                                description: 'JSON Files',
+                                accept: {'application/json': ['.json']}
+                            }]
+                        });
+                    }
+                    const writable = await fileHandle.createWritable();
+                    await writable.write(exportData);
+                    await writable.close();
+                } else {
+                    // Fallback: download
+                    const blob = new Blob([exportData], {type: 'application/json'});
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = (data.projectName ? data.projectName + '_' : '') + 'FusionTimekeeper.json';
+                    document.body.appendChild(a);
+                    a.click();
+                    setTimeout(() => {
+                        document.body.removeChild(a);
+                        URL.revokeObjectURL(url);
+                    }, 100);
+                }
+            } catch (err) {
+                alert('Failed to save: ' + err);
+            }
+        }
+        async function autoSave() {
+            // Auto-save every 5 minutes if fileHandle is set
+            if (fileHandle && 'createWritable' in fileHandle) {
+                try {
+                    const exportData = JSON.stringify(data, null, 2);
+                    const writable = await fileHandle.createWritable();
+                    await writable.write(exportData);
+                    await writable.close();
+                } catch (err) {
+                    // Ignore auto-save errors
+                }
+            }
+        }
+        // --- Event Handlers ---
+        startBtn.addEventListener('click', () => {
             if (!startTime) {
                 startTime = Date.now();
                 timerInterval = setInterval(updateDisplay, 1000);
@@ -102,36 +281,71 @@
                 stopBtn.disabled = false;
                 resetBtn.disabled = false;
             }
-        }
-
-        function stopTimer() {
+        });
+        stopBtn.addEventListener('click', () => {
             if (startTime) {
-                elapsed += Date.now() - startTime;
-                startTime = null;
-                clearInterval(timerInterval);
-                updateDisplay();
-                startBtn.disabled = false;
-                stopBtn.disabled = true;
-                resetBtn.disabled = false;
+                const seconds = Math.floor((Date.now() - startTime) / 1000) + elapsed;
+                saveSession(seconds);
+                resetTimerUI();
             }
+        });
+        resetBtn.addEventListener('click', resetTimerUI);
+        dateDropdown.addEventListener('change', (e) => {
+            currentDate = e.target.value;
+            updateSessionList();
+        });
+        projectNameInput.addEventListener('input', (e) => {
+            data.projectName = e.target.value;
+            autoSave();
+        });
+        saveBtn.addEventListener('click', async () => {
+            // Always prompt for location if no fileHandle
+            if (!fileHandle || !('createWritable' in fileHandle)) {
+                fileHandle = null;
+            }
+            await saveToFile();
+        });
+        importBtn.addEventListener('click', () => {
+            importFile.click();
+        });
+        importFile.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(evt) {
+                try {
+                    const imported = JSON.parse(evt.target.result);
+                    if (imported.sessions && Array.isArray(imported.sessions)) {
+                        data = imported;
+                        projectNameInput.value = data.projectName || '';
+                        currentDate = data.sessions.length ? data.sessions[data.sessions.length-1].date : getToday();
+                        updateDropdown();
+                        updateSessionList();
+                        resetTimerUI();
+                        fileHandle = null; // Reset file handle on import
+                    } else {
+                        alert('Invalid file format.');
+                    }
+                } catch (err) {
+                    alert('Failed to import: ' + err);
+                }
+            };
+            reader.readAsText(file);
+        });
+        // --- Initialize ---
+        function init() {
+            data.projectName = '';
+            data.sessions = [];
+            currentDate = getToday();
+            projectNameInput.value = '';
+            updateDropdown();
+            updateSessionList();
+            resetTimerUI();
+            // Set up auto-save every 5 minutes
+            if (autoSaveInterval) clearInterval(autoSaveInterval);
+            autoSaveInterval = setInterval(autoSave, 5 * 60 * 1000);
         }
-
-        function resetTimer() {
-            startTime = null;
-            elapsed = 0;
-            clearInterval(timerInterval);
-            updateDisplay();
-            startBtn.disabled = false;
-            stopBtn.disabled = true;
-            resetBtn.disabled = true;
-        }
-
-        startBtn.addEventListener('click', startTimer);
-        stopBtn.addEventListener('click', stopTimer);
-        resetBtn.addEventListener('click', resetTimer);
-
-        // Initialize
-        updateDisplay();
+        init();
     </script>
 </body>
 </html> 
