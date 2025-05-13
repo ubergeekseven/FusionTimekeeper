@@ -143,6 +143,7 @@
     </div>
     <script>
         // --- Data Model ---
+        let fullJson = {};
         let data = {
             projectName: '',
             sessions: [] // {date: 'YYYY-MM-DD', times: [seconds, ...]}
@@ -272,43 +273,80 @@
             }
             return sessionsCopy;
         }
+        function setSharedData() {
+            // Only share the timeTracker data now that notes are in a separate file
+            window.fusionTimekeeperData = { 
+                timeTracker: data,
+                // Keep any existing notes if present
+                notes: window.fusionTimekeeperData && window.fusionTimekeeperData.notes ? 
+                       window.fusionTimekeeperData.notes : ''
+            };
+            window.fusionTimekeeperFileHandle = fileHandle;
+            
+            console.log('Shared data updated:', window.fusionTimekeeperData);
+        }
         async function saveToFile() {
+            updateLastSaved();
             try {
                 // Always include current running timer in save
                 let sessionsToSave = getSessionsWithCurrent();
-                const exportData = JSON.stringify({ ...data, sessions: sessionsToSave }, null, 2);
+                
+                // Now we only save timeTracker data in this file
+                fullJson = { timeTracker: { ...data, sessions: sessionsToSave } };
+                const exportData = JSON.stringify(fullJson, null, 2);
                 let filename = (data.projectName ? data.projectName : 'FusionTimekeeper') + '.json';
+                
+                console.log('Saving timekeeper file with data:', fullJson);
+                
                 if ('showSaveFilePicker' in window) {
-                    // File System Access API supported
-                    if (!fileHandle) {
-                        fileHandle = await window.showSaveFilePicker({
-                            suggestedName: filename,
-                            types: [{
-                                description: 'JSON Files',
-                                accept: {'application/json': ['.json']}
-                            }]
-                        });
+                    try {
+                        // If we don't have a file handle or can't use it, get a new one
+                        if (!fileHandle || !('createWritable' in fileHandle)) {
+                            console.log('No file handle, requesting one');
+                            fileHandle = await window.showSaveFilePicker({
+                                suggestedName: filename,
+                                types: [{
+                                    description: 'JSON Files',
+                                    accept: {'application/json': ['.json']}
+                                }]
+                            });
+                            console.log('Got file handle:', fileHandle.name);
+                        }
+                        
+                        console.log('Writing to file using handle');
+                        const writable = await fileHandle.createWritable();
+                        await writable.write(exportData);
+                        await writable.close();
+                        lastSavedTime = new Date();
+                        updateLastSaved();
+                        setSharedData();
+                        console.log('File saved successfully');
+                        return;
+                    } catch (err) {
+                        // If user cancels or permission denied, fallback to download
+                        console.error('Save error:', err);
+                        // Fall through to download method
                     }
-                    const writable = await fileHandle.createWritable();
-                    await writable.write(exportData);
-                    await writable.close();
-                } else {
-                    // Fallback: download
-                    const blob = new Blob([exportData], {type: 'application/json'});
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = filename;
-                    document.body.appendChild(a);
-                    a.click();
-                    setTimeout(() => {
-                        document.body.removeChild(a);
-                        URL.revokeObjectURL(url);
-                    }, 100);
                 }
+                
+                // Fallback: download
+                console.log('Using fallback download method');
+                const blob = new Blob([exportData], {type: 'application/json'});
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                setTimeout(() => {
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                }, 100);
                 lastSavedTime = new Date();
                 updateLastSaved();
+                setSharedData();
             } catch (err) {
+                console.error('Failed to save:', err);
                 alert('Failed to save: ' + err);
             }
         }
@@ -317,13 +355,20 @@
             if (fileHandle && 'createWritable' in fileHandle) {
                 try {
                     let sessionsToSave = getSessionsWithCurrent();
-                    const exportData = JSON.stringify({ ...data, sessions: sessionsToSave }, null, 2);
+                    
+                    // Now we only save timeTracker data in this file
+                    fullJson = { timeTracker: { ...data, sessions: sessionsToSave } };
+                    const exportData = JSON.stringify(fullJson, null, 2);
+                    
                     const writable = await fileHandle.createWritable();
                     await writable.write(exportData);
                     await writable.close();
                     lastSavedTime = new Date();
                     updateLastSaved();
+                    setSharedData();
+                    console.log('Auto-save completed');
                 } catch (err) {
+                    console.error('Auto-save error:', err);
                     // Ignore auto-save errors
                 }
             }
@@ -459,8 +504,8 @@
         });
         saveBtn.addEventListener('click', async () => {
             // Always prompt for location if no fileHandle
-            if (!fileHandle || !('createWritable' in fileHandle)) {
-                fileHandle = null;
+            if (!fileHandle) {
+                console.log('No file handle for save, will prompt for location');
             }
             await saveToFile();
         });
@@ -474,20 +519,34 @@
             reader.onload = function(evt) {
                 try {
                     const imported = JSON.parse(evt.target.result);
-                    if (imported.sessions && Array.isArray(imported.sessions)) {
+                    fullJson = imported; // Store the complete JSON
+                    
+                    // Extract timeTracker data
+                    if (imported.timeTracker) {
+                        data = imported.timeTracker;
+                    } else if (imported.sessions && Array.isArray(imported.sessions)) {
                         data = imported;
-                        projectNameInput.value = data.projectName || '';
-                        currentDate = data.sessions.length ? data.sessions[data.sessions.length-1].date : getToday();
-                        updateDropdown();
-                        updateSessionList();
-                        resetTimerUI();
-                        fileHandle = null; // Reset file handle on import
-                        lastSavedTime = null;
-                        updateLastSaved();
+                        // Convert old format to new format
+                        fullJson = { timeTracker: data };
                     } else {
-                        alert('Invalid file format.');
+                        throw new Error('No valid timeTracker data found');
                     }
+                    
+                    projectNameInput.value = data.projectName || '';
+                    currentDate = data.sessions && data.sessions.length ? 
+                        data.sessions[data.sessions.length-1].date : getToday();
+                    updateDropdown();
+                    updateSessionList();
+                    resetTimerUI();
+                    fileHandle = null; // Reset file handle on import
+                    lastSavedTime = null;
+                    updateLastSaved();
+                    
+                    // Update shared data
+                    setSharedData();
+                    console.log('File imported successfully:', file.name);
                 } catch (err) {
+                    console.error('Import error:', err);
                     alert('Failed to import: ' + err);
                 }
             };
@@ -497,18 +556,37 @@
         mdBtn.addEventListener('click', exportMarkdown);
         // --- Initialize ---
         function init() {
-            data.projectName = '';
-            data.sessions = [];
-            currentDate = getToday();
-            projectNameInput.value = '';
+            console.log('Initializing TimeTracker palette');
+            
+            // Check for existing shared data
+            if (window.fusionTimekeeperData && window.fusionTimekeeperData.timeTracker) {
+                console.log('Found shared timeTracker data');
+                fullJson = window.fusionTimekeeperData;
+                data = window.fusionTimekeeperData.timeTracker;
+                fileHandle = window.fusionTimekeeperFileHandle || null;
+            } else {
+                console.log('No shared data found, initializing empty');
+                data = {
+                    projectName: '',
+                    sessions: []
+                };
+                fullJson = { timeTracker: data };
+            }
+            
+            currentDate = data.sessions && data.sessions.length ? 
+                data.sessions[data.sessions.length-1].date : getToday();
+            projectNameInput.value = data.projectName || '';
             updateDropdown();
             updateSessionList();
             resetTimerUI();
             lastSavedTime = null;
             updateLastSaved();
+            
             // Set up auto-save every 5 minutes
             if (autoSaveInterval) clearInterval(autoSaveInterval);
             autoSaveInterval = setInterval(autoSave, 5 * 60 * 1000);
+            
+            console.log('TimeTracker initialized');
         }
         init();
     </script>

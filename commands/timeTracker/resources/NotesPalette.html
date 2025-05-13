@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Notes</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background: #f8f8f8;
+        }
+        .container {
+            background: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            padding: 24px 20px 20px 20px;
+            max-width: 420px;
+            margin: 0 auto;
+        }
+        h2 {
+            text-align: center;
+            color: #1976D2;
+            margin-bottom: 10px;
+        }
+        .user-message {
+            background: #f0f4c3;
+            color: #666;
+            border-radius: 4px;
+            padding: 6px 10px;
+            margin-bottom: 10px;
+            font-size: 0.95em;
+            position: relative;
+        }
+        .user-message .dismiss-btn {
+            position: absolute;
+            top: 4px;
+            right: 8px;
+            background: none;
+            border: none;
+            color: #888;
+            font-size: 1.1em;
+            cursor: pointer;
+        }
+        textarea {
+            width: 100%;
+            min-height: 200px;
+            resize: vertical;
+            border-radius: 4px;
+            border: 1px solid #ccc;
+            padding: 8px;
+            font-size: 1em;
+            margin-bottom: 12px;
+        }
+        .button-row {
+            display: flex;
+            justify-content: flex-end;
+        }
+        .button {
+            background-color: #2196F3;
+            color: white;
+            padding: 10px 18px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 1em;
+            transition: background 0.2s;
+        }
+        .button:disabled {
+            background: #b0bec5;
+            cursor: not-allowed;
+        }
+        .button:hover:not(:disabled) {
+            background-color: #1976D2;
+        }
+        .footer {
+            text-align: center;
+            margin-top: 18px;
+            font-size: 0.9em;
+            color: #888;
+        }
+        .file-row {
+            margin-bottom: 10px;
+            text-align: right;
+        }
+        .file-row input[type="file"] {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>Project Notes</h2>
+        <div class="user-message" id="userMsg">
+            <button class="dismiss-btn" id="dismissMsg" title="Dismiss">&times;</button>
+            <b>Notes are now saved in a separate file</b> from your time tracking data.<br>
+            Click <b>Save</b> to create a notes file with the same base name as your project.<br>
+            Click <b>Load JSON</b> to open an existing notes file.
+        </div>
+        <div class="file-row">
+            <button class="button" id="loadBtn">Load Notes</button>
+            <input type="file" id="importFile" accept="application/json" />
+        </div>
+        <textarea id="notesArea" placeholder="Enter your project notes here..."></textarea>
+        <div class="button-row">
+            <button class="button" id="saveBtn">Save Notes</button>
+        </div>
+        <div class="footer">Notes are saved in a separate file with the same base name as your project.<br>They are not included in invoice/CSV exports.</div>
+    </div>
+    <script>
+        let notes = '';
+        let jsonData = {};
+        let fullJson = {};
+        let fileHandle = null;
+
+        const notesArea = document.getElementById('notesArea');
+        const saveBtn = document.getElementById('saveBtn');
+        const loadBtn = document.getElementById('loadBtn');
+        const importFile = document.getElementById('importFile');
+
+        // --- Utility Functions ---
+        function loadNotesFromJson(data) {
+            notes = data.notes || '';
+            notesArea.value = notes;
+            console.log('Notes loaded:', notes);
+        }
+        function updateJsonWithNotes() {
+            // Preserve any existing data in the fullJson object
+            if (!fullJson.timeTracker && window.fusionTimekeeperData && window.fusionTimekeeperData.timeTracker) {
+                fullJson.timeTracker = window.fusionTimekeeperData.timeTracker;
+            }
+            fullJson.notes = notesArea.value;
+            console.log('Updated JSON with notes:', fullJson);
+        }
+        
+        // Get the base filename (without extension) for the project
+        function getBaseFilename() {
+            let projectName = '';
+            if (fullJson.timeTracker && fullJson.timeTracker.projectName) {
+                projectName = fullJson.timeTracker.projectName;
+            } else if (window.fusionTimekeeperData && window.fusionTimekeeperData.timeTracker && window.fusionTimekeeperData.timeTracker.projectName) {
+                projectName = window.fusionTimekeeperData.timeTracker.projectName;
+            }
+            return projectName || 'FusionTimekeeper';
+        }
+        
+        // --- File Load/Save Functions ---
+        async function saveToFile() {
+            try {
+                // Create a notes-only JSON object
+                const notesData = {
+                    notes: notesArea.value,
+                    lastModified: new Date().toISOString(),
+                    associatedProject: getBaseFilename()
+                };
+                
+                const exportData = JSON.stringify(notesData, null, 2);
+                let filename = getBaseFilename() + '_notes.json';
+                
+                console.log('Notes saveToFile called, saving to separate notes file:', filename);
+                
+                // Try to use File System Access API if available
+                if ('showSaveFilePicker' in window) {
+                    try {
+                        // Always get a new file handle to ensure we're saving to the right location
+                        console.log('Using File Picker API to save notes file');
+                        fileHandle = await window.showSaveFilePicker({
+                            suggestedName: filename,
+                            types: [{
+                                description: 'Notes JSON Files',
+                                accept: {'application/json': ['.json']}
+                            }]
+                        });
+                        console.log('Got new file handle:', fileHandle.name);
+                        
+                        // Save the file
+                        console.log('Writing to notes file');
+                        const writable = await fileHandle.createWritable();
+                        await writable.write(exportData);
+                        await writable.close();
+                        
+                        // Also update the shared data
+                        if (window.fusionTimekeeperData) {
+                            window.fusionTimekeeperData.notes = notesArea.value;
+                        } else {
+                            window.fusionTimekeeperData = { notes: notesArea.value };
+                        }
+                        
+                        console.log('Notes file saved successfully');
+                        alert('Notes saved successfully to ' + fileHandle.name);
+                        return;
+                    } catch (err) {
+                        console.error('File picker save error:', err);
+                        // Fall through to download method
+                    }
+                }
+                
+                // Fallback: download as file
+                console.log('Using fallback download method');
+                const blob = new Blob([exportData], {type: 'application/json'});
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                setTimeout(() => {
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                }, 100);
+                alert('Notes saved as download. The file picker API is not available in this environment.');
+                
+                // Still update shared data
+                if (window.fusionTimekeeperData) {
+                    window.fusionTimekeeperData.notes = notesArea.value;
+                } else {
+                    window.fusionTimekeeperData = { notes: notesArea.value };
+                }
+            } catch (err) {
+                console.error('Failed to save notes:', err);
+                alert('Failed to save notes: ' + err);
+            }
+        }
+        
+        async function loadFromFile() {
+            try {
+                if ('showOpenFilePicker' in window) {
+                    try {
+                        console.log('Using File Picker API to load notes file');
+                        const [handle] = await window.showOpenFilePicker({
+                            types: [{
+                                description: 'Notes JSON Files',
+                                accept: {'application/json': ['.json']}
+                            }]
+                        });
+                        fileHandle = handle;
+                        console.log('File handle acquired:', handle.name);
+                        
+                        const file = await handle.getFile();
+                        const text = await file.text();
+                        const loadedData = JSON.parse(text);
+                        
+                        // Check if it's a notes file or a timekeeper file
+                        if (loadedData.notes && typeof loadedData.notes === 'string') {
+                            // It could be either format, just get the notes
+                            notes = loadedData.notes;
+                            notesArea.value = notes;
+                            
+                            // Update the shared data
+                            if (window.fusionTimekeeperData) {
+                                window.fusionTimekeeperData.notes = notes;
+                            } else {
+                                window.fusionTimekeeperData = { notes: notes };
+                            }
+                            
+                            console.log('Notes loaded successfully');
+                            alert('Notes loaded from: ' + handle.name);
+                        } else {
+                            // Not a valid notes file
+                            console.error('Invalid notes file format');
+                            alert('The selected file does not contain valid notes data.');
+                        }
+                    } catch (err) {
+                        console.error('File picker load error:', err);
+                        if (err.name !== 'AbortError') {
+                            alert('Failed to load file: ' + err);
+                        }
+                    }
+                } else {
+                    console.log('File Picker API not available, using file input');
+                    importFile.click();
+                }
+            } catch (err) {
+                console.error('Load file error:', err);
+                alert('Error loading file: ' + err);
+            }
+        }
+        
+        importFile.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            
+            console.log('File selected via input:', file.name);
+            const reader = new FileReader();
+            reader.onload = function(evt) {
+                try {
+                    const loadedData = JSON.parse(evt.target.result);
+                    
+                    // Check if it's a notes file or a timekeeper file
+                    if (loadedData.notes && typeof loadedData.notes === 'string') {
+                        // It could be either format, just get the notes
+                        notes = loadedData.notes;
+                        notesArea.value = notes;
+                        
+                        // Update the shared data
+                        if (window.fusionTimekeeperData) {
+                            window.fusionTimekeeperData.notes = notes;
+                        } else {
+                            window.fusionTimekeeperData = { notes: notes };
+                        }
+                        
+                        console.log('Notes loaded successfully');
+                        alert('Notes loaded from: ' + file.name);
+                    } else {
+                        // Not a valid notes file
+                        console.error('Invalid notes file format');
+                        alert('The selected file does not contain valid notes data.');
+                    }
+                } catch (err) {
+                    console.error('Import error:', err);
+                    alert('Failed to import: ' + err);
+                }
+            };
+            reader.readAsText(file);
+        });
+        // --- Event Handlers ---
+        saveBtn.addEventListener('click', function() {
+            console.log('Save button clicked, fileHandle:', fileHandle ? fileHandle.name : 'none');
+            saveToFile();
+        });
+        loadBtn.addEventListener('click', loadFromFile);
+        notesArea.addEventListener('focus', async () => {
+            // If notes are blank, try to load from file if available
+            if (!notesArea.value && fileHandle) {
+                try {
+                    const file = await fileHandle.getFile();
+                    const text = await file.text();
+                    fullJson = JSON.parse(text);
+                    loadNotesFromJson(fullJson);
+                } catch (err) {
+                    // ignore
+                }
+            }
+        });
+        // Dismiss user message
+        document.getElementById('dismissMsg').addEventListener('click', function() {
+            document.getElementById('userMsg').style.display = 'none';
+        });
+        // --- Initialize ---
+        async function init() {
+            console.log('Initializing Notes palette');
+            
+            // Use shared data if available
+            if (window.fusionTimekeeperData && window.fusionTimekeeperData.notes) {
+                console.log('Found notes in shared data');
+                notes = window.fusionTimekeeperData.notes;
+                notesArea.value = notes;
+            } else {
+                console.log('No shared notes found, initializing empty');
+                notes = '';
+                notesArea.value = '';
+                
+                // Update the message to explain the new approach
+                document.getElementById('userMsg').innerHTML = `
+                    <button class="dismiss-btn" id="dismissMsg" title="Dismiss">&times;</button>
+                    <b>Notes are now saved in a separate file</b> from your time tracking data.<br>
+                    Click <b>Save</b> to create a notes file with the same base name as your project.<br>
+                    Click <b>Load JSON</b> to open an existing notes file.
+                `;
+            }
+            
+            // Re-attach the dismiss button event handler
+            document.getElementById('dismissMsg').addEventListener('click', function() {
+                document.getElementById('userMsg').style.display = 'none';
+            });
+        }
+        init();
+    </script>
+</body>
+</html> 

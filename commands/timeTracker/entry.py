@@ -12,31 +12,46 @@ if lib_dir not in sys.path:
 
 from timeTrackerUtils.time_tracker import TimeTracker
 from timeTrackerUtils.ui.main_window import TimeTrackerWindow
+# We'll import NotesWindow after it's created
+try:
+    from timeTrackerUtils.ui.notes_window import NotesWindow
+except ImportError:
+    NotesWindow = None
 
 # Command identity information
 CMD_ID = 'FusionTimekeeper'
 CMD_NAME = 'Time Tracker'
 CMD_DESCRIPTION = 'Track time spent on your Fusion 360 projects'
 
+NOTES_CMD_ID = 'FusionNotes'
+NOTES_CMD_NAME = 'Notes'
+NOTES_CMD_DESCRIPTION = 'Project notes and scratchpad'
+
 # Specify that the command will be promoted to the panel
 IS_PROMOTED = True
 
 # Define the location where the command button will be created
 WORKSPACE_ID = 'FusionSolidEnvironment'
-PANEL_ID = 'SolidScriptsAddinsPanel'
-COMMAND_BESIDE_ID = 'ScriptsManagerCommand'
+CUSTOM_TAB_ID = 'MichaelDotsToolsTab'
+CUSTOM_TAB_NAME = "MichaelDots's Tools"
+CUSTOM_PANEL_ID = 'MichaelDotsToolsPanel'
+CUSTOM_PANEL_NAME = 'Toolbox'
 
-# Resource location for command icons
-ICON_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'resources')
+# Resource locations for command icons
+TIMEKEEPER_ICON_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'resources', 'timekeeper_icon')
+NOTES_ICON_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'resources', 'notes_icon')
 
-# Global command instance
+# Global command instances
 _cmd = None
+_notes_cmd = None
 
 def start():
-    global _cmd
+    global _cmd, _notes_cmd
     try:
         _cmd = FusionTimekeeperCommand()
         _cmd.start()
+        _notes_cmd = NotesCommand()
+        _notes_cmd.start()
     except:
         if adsk.core.Application.get():
             adsk.core.Application.get().userInterface.messageBox(
@@ -44,10 +59,12 @@ def start():
             )
 
 def stop():
-    global _cmd
+    global _cmd, _notes_cmd
     try:
         if _cmd and _cmd.window:
             _cmd.window.palette.deleteMe()
+        if _notes_cmd and _notes_cmd.window:
+            _notes_cmd.window.palette.deleteMe()
     except:
         if adsk.core.Application.get():
             adsk.core.Application.get().userInterface.messageBox(
@@ -62,13 +79,30 @@ class TimeTrackerCommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
 
     def notify(self, args):
         try:
-            # Create and show the time tracker window
             self.window = TimeTrackerWindow(self.time_tracker)
             self.window.show()
         except:
             if adsk.core.Application.get():
                 adsk.core.Application.get().userInterface.messageBox(
                     'Failed to create command:\n{}'.format(traceback.format_exc())
+                )
+
+class NotesCommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
+    def __init__(self):
+        super().__init__()
+        self.window = None
+
+    def notify(self, args):
+        try:
+            if NotesWindow:
+                self.window = NotesWindow()
+                self.window.show()
+            else:
+                adsk.core.Application.get().userInterface.messageBox('NotesWindow not implemented yet.')
+        except:
+            if adsk.core.Application.get():
+                adsk.core.Application.get().userInterface.messageBox(
+                    'Failed to create notes command:\n{}'.format(traceback.format_exc())
                 )
 
 class FusionTimekeeperCommand:
@@ -82,40 +116,70 @@ class FusionTimekeeperCommand:
 
     def start(self):
         try:
-            # Check if the command definition already exists
             cmd_defs = self.ui.commandDefinitions
             self.cmd_def = cmd_defs.itemById(CMD_ID)
             if self.cmd_def:
                 self.cmd_def.deleteMe()
-            
-            # Create the command definition
             self.cmd_def = cmd_defs.addButtonDefinition(
                 CMD_ID,
                 CMD_NAME,
                 CMD_DESCRIPTION,
-                ICON_FOLDER
+                TIMEKEEPER_ICON_FOLDER
             )
-
-            # Get the target workspace
             workspace = self.ui.workspaces.itemById(WORKSPACE_ID)
             if workspace:
-                # Get the panel
-                panel = workspace.toolbarPanels.itemById(PANEL_ID)
-                if panel:
-                    # Create the button command control in the UI
-                    control = panel.controls.addCommand(self.cmd_def, '', False)
-                    # Specify if the command is promoted to the main toolbar
-                    control.isPromoted = IS_PROMOTED
-
-                    # Create and add the command created handler
-                    handler = TimeTrackerCommandCreatedHandler(self.time_tracker)
-                    self.cmd_def.commandCreated.add(handler)
-                    self.handlers.append(handler)
-                else:
-                    self.ui.messageBox(f'Panel {PANEL_ID} not found')
+                tab = workspace.toolbarTabs.itemById(CUSTOM_TAB_ID)
+                if not tab:
+                    tab = workspace.toolbarTabs.add(CUSTOM_TAB_ID, CUSTOM_TAB_NAME)
+                panel = tab.toolbarPanels.itemById(CUSTOM_PANEL_ID)
+                if not panel:
+                    panel = tab.toolbarPanels.add(CUSTOM_PANEL_ID, CUSTOM_PANEL_NAME)
+                control = panel.controls.addCommand(self.cmd_def)
+                control.isPromoted = IS_PROMOTED
+                handler = TimeTrackerCommandCreatedHandler(self.time_tracker)
+                self.cmd_def.commandCreated.add(handler)
+                self.handlers.append(handler)
             else:
                 self.ui.messageBox(f'Workspace {WORKSPACE_ID} not found')
-
         except:
             if self.ui:
-                self.ui.messageBox('Failed to start:\n{}'.format(traceback.format_exc())) 
+                self.ui.messageBox('Failed to start:\n{}'.format(traceback.format_exc()))
+
+class NotesCommand:
+    def __init__(self):
+        self.app = adsk.core.Application.get()
+        self.ui = self.app.userInterface
+        self.window = None
+        self.handlers = []
+        self.cmd_def = None
+
+    def start(self):
+        try:
+            cmd_defs = self.ui.commandDefinitions
+            self.cmd_def = cmd_defs.itemById(NOTES_CMD_ID)
+            if self.cmd_def:
+                self.cmd_def.deleteMe()
+            self.cmd_def = cmd_defs.addButtonDefinition(
+                NOTES_CMD_ID,
+                NOTES_CMD_NAME,
+                NOTES_CMD_DESCRIPTION,
+                NOTES_ICON_FOLDER
+            )
+            workspace = self.ui.workspaces.itemById(WORKSPACE_ID)
+            if workspace:
+                tab = workspace.toolbarTabs.itemById(CUSTOM_TAB_ID)
+                if not tab:
+                    tab = workspace.toolbarTabs.add(CUSTOM_TAB_ID, CUSTOM_TAB_NAME)
+                panel = tab.toolbarPanels.itemById(CUSTOM_PANEL_ID)
+                if not panel:
+                    panel = tab.toolbarPanels.add(CUSTOM_PANEL_ID, CUSTOM_PANEL_NAME)
+                control = panel.controls.addCommand(self.cmd_def)
+                control.isPromoted = IS_PROMOTED
+                handler = NotesCommandCreatedHandler()
+                self.cmd_def.commandCreated.add(handler)
+                self.handlers.append(handler)
+            else:
+                self.ui.messageBox(f'Workspace {WORKSPACE_ID} not found')
+        except:
+            if self.ui:
+                self.ui.messageBox('Failed to start notes command:\n{}'.format(traceback.format_exc())) 
