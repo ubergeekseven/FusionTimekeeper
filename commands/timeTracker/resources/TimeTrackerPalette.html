@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Fusion Timekeeper</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background: #f8f8f8;
+        }
+        .container {
+            background: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            padding: 24px 20px 20px 20px;
+            max-width: 320px;
+            margin: 0 auto;
+        }
+        h2 {
+            text-align: center;
+            color: #1976D2;
+            margin-bottom: 18px;
+        }
+        .time-display {
+            font-size: 2.2em;
+            text-align: center;
+            margin: 18px 0 24px 0;
+            color: #333;
+            letter-spacing: 2px;
+        }
+        .button-row {
+            display: flex;
+            justify-content: space-between;
+        }
+        .button {
+            flex: 1;
+            background-color: #2196F3;
+            color: white;
+            padding: 10px 0;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 0 4px;
+            font-size: 1em;
+            transition: background 0.2s;
+        }
+        .button:disabled {
+            background: #b0bec5;
+            cursor: not-allowed;
+        }
+        .button:hover:not(:disabled) {
+            background-color: #1976D2;
+        }
+        .footer {
+            text-align: center;
+            margin-top: 18px;
+            font-size: 0.9em;
+            color: #888;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>Fusion Timekeeper</h2>
+        <div class="time-display" id="timeDisplay">00:00:00</div>
+        <div class="button-row">
+            <button class="button" id="startBtn">Start</button>
+            <button class="button" id="stopBtn" disabled>Stop</button>
+            <button class="button" id="resetBtn" disabled>Reset</button>
+        </div>
+        <div class="footer">Session time only. Data is not saved.</div>
+    </div>
+    <script>
+        let startTime = null;
+        let elapsed = 0;
+        let timerInterval = null;
+
+        const timeDisplay = document.getElementById('timeDisplay');
+        const startBtn = document.getElementById('startBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const resetBtn = document.getElementById('resetBtn');
+
+        function updateDisplay() {
+            let total = elapsed;
+            if (startTime) {
+                total += Date.now() - startTime;
+            }
+            const hours = Math.floor(total / 3600000);
+            const minutes = Math.floor((total % 3600000) / 60000);
+            const seconds = Math.floor((total % 60000) / 1000);
+            timeDisplay.textContent = `${hours.toString().padStart(2, '0')}` +
+                `:${minutes.toString().padStart(2, '0')}` +
+                `:${seconds.toString().padStart(2, '0')}`;
+        }
+
+        function startTimer() {
+            if (!startTime) {
+                startTime = Date.now();
+                timerInterval = setInterval(updateDisplay, 1000);
+                startBtn.disabled = true;
+                stopBtn.disabled = false;
+                resetBtn.disabled = false;
+            }
+        }
+
+        function stopTimer() {
+            if (startTime) {
+                elapsed += Date.now() - startTime;
+                startTime = null;
+                clearInterval(timerInterval);
+                updateDisplay();
+                startBtn.disabled = false;
+                stopBtn.disabled = true;
+                resetBtn.disabled = false;
+            }
+        }
+
+        function resetTimer() {
+            startTime = null;
+            elapsed = 0;
+            clearInterval(timerInterval);
+            updateDisplay();
+            startBtn.disabled = false;
+            stopBtn.disabled = true;
+            resetBtn.disabled = true;
+        }
+
+        startBtn.addEventListener('click', startTimer);
+        stopBtn.addEventListener('click', stopTimer);
+        resetBtn.addEventListener('click', resetTimer);
+
+        // Initialize
+        updateDisplay();
+    </script>
+</body>
+</html> 
