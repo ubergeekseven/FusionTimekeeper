@@ -14,7 +14,7 @@
             border-radius: 8px;
             box-shadow: 0 2px 8px rgba(0,0,0,0.08);
             padding: 24px 20px 20px 20px;
-            max-width: 340px;
+            max-width: 360px;
             margin: 0 auto;
         }
         h2 {
@@ -95,6 +95,22 @@
             color: #1976D2;
             text-align: right;
         }
+        .last-saved {
+            text-align: right;
+            font-size: 0.92em;
+            color: #666;
+            margin-top: 4px;
+            margin-bottom: 8px;
+        }
+        .export-row {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 8px;
+        }
+        .export-row .button {
+            flex: 1;
+            margin: 0 2px;
+        }
     </style>
 </head>
 <body>
@@ -118,6 +134,11 @@
             <button class="button" id="importBtn">Import JSON</button>
             <input type="file" id="importFile" style="display:none;" accept="application/json" />
         </div>
+        <div class="last-saved" id="lastSaved"></div>
+        <div class="export-row">
+            <button class="button" id="csvBtn">Export CSV</button>
+            <button class="button" id="mdBtn">Export Markdown</button>
+        </div>
         <div class="footer">Session time is stored in memory. Save to avoid losing your work.</div>
     </div>
     <script>
@@ -132,6 +153,7 @@
         let currentDate = getToday();
         let fileHandle = null; // For File System Access API
         let autoSaveInterval = null;
+        let lastSavedTime = null;
 
         // --- DOM Elements ---
         const timeDisplay = document.getElementById('timeDisplay');
@@ -145,6 +167,9 @@
         const importBtn = document.getElementById('importBtn');
         const importFile = document.getElementById('importFile');
         const overallTotal = document.getElementById('overallTotal');
+        const lastSaved = document.getElementById('lastSaved');
+        const csvBtn = document.getElementById('csvBtn');
+        const mdBtn = document.getElementById('mdBtn');
 
         // --- Utility Functions ---
         function getToday() {
@@ -159,8 +184,9 @@
                 `:${minutes.toString().padStart(2, '0')}` +
                 `:${seconds.toString().padStart(2, '0')}`;
         }
-        function getOverallTotal() {
-            return data.sessions.reduce((sum, session) => {
+        function getOverallTotal(sessionsOverride) {
+            let sessions = sessionsOverride || data.sessions;
+            return sessions.reduce((sum, session) => {
                 return sum + session.times.reduce((s, t) => s + t, 0);
             }, 0);
         }
@@ -202,6 +228,13 @@
             let overall = getOverallTotal();
             overallTotal.innerHTML = `Overall Total: ${formatTime(overall)}`;
         }
+        function updateLastSaved() {
+            if (lastSavedTime) {
+                lastSaved.textContent = `Last saved at: ${lastSavedTime.toLocaleTimeString()}`;
+            } else {
+                lastSaved.textContent = '';
+            }
+        }
         function saveSession(seconds) {
             let session = data.sessions.find(s => s.date === currentDate);
             if (!session) {
@@ -224,14 +257,32 @@
             resetBtn.disabled = true;
         }
         // --- File Save/Load Functions ---
+        function getSessionsWithCurrent() {
+            // Clone sessions and add current running timer if any
+            let sessionsCopy = JSON.parse(JSON.stringify(data.sessions));
+            if (startTime) {
+                let runningSeconds = Math.floor((Date.now() - startTime) / 1000) + elapsed;
+                let session = sessionsCopy.find(s => s.date === currentDate);
+                if (!session) {
+                    session = {date: currentDate, times: []};
+                    sessionsCopy.push(session);
+                    sessionsCopy.sort((a, b) => a.date.localeCompare(b.date));
+                }
+                session.times = [...session.times, runningSeconds];
+            }
+            return sessionsCopy;
+        }
         async function saveToFile() {
             try {
-                const exportData = JSON.stringify(data, null, 2);
+                // Always include current running timer in save
+                let sessionsToSave = getSessionsWithCurrent();
+                const exportData = JSON.stringify({ ...data, sessions: sessionsToSave }, null, 2);
+                let filename = (data.projectName ? data.projectName : 'FusionTimekeeper') + '.json';
                 if ('showSaveFilePicker' in window) {
                     // File System Access API supported
                     if (!fileHandle) {
                         fileHandle = await window.showSaveFilePicker({
-                            suggestedName: (data.projectName ? data.projectName + '_' : '') + 'FusionTimekeeper.json',
+                            suggestedName: filename,
                             types: [{
                                 description: 'JSON Files',
                                 accept: {'application/json': ['.json']}
@@ -247,7 +298,7 @@
                     const url = URL.createObjectURL(blob);
                     const a = document.createElement('a');
                     a.href = url;
-                    a.download = (data.projectName ? data.projectName + '_' : '') + 'FusionTimekeeper.json';
+                    a.download = filename;
                     document.body.appendChild(a);
                     a.click();
                     setTimeout(() => {
@@ -255,6 +306,8 @@
                         URL.revokeObjectURL(url);
                     }, 100);
                 }
+                lastSavedTime = new Date();
+                updateLastSaved();
             } catch (err) {
                 alert('Failed to save: ' + err);
             }
@@ -263,13 +316,119 @@
             // Auto-save every 5 minutes if fileHandle is set
             if (fileHandle && 'createWritable' in fileHandle) {
                 try {
-                    const exportData = JSON.stringify(data, null, 2);
+                    let sessionsToSave = getSessionsWithCurrent();
+                    const exportData = JSON.stringify({ ...data, sessions: sessionsToSave }, null, 2);
                     const writable = await fileHandle.createWritable();
                     await writable.write(exportData);
                     await writable.close();
+                    lastSavedTime = new Date();
+                    updateLastSaved();
                 } catch (err) {
                     // Ignore auto-save errors
                 }
+            }
+        }
+        // --- CSV Export ---
+        async function exportCSV() {
+            let filename = (data.projectName ? data.projectName : 'FusionTimekeeper') + '.csv';
+            let sessionsToExport = getSessionsWithCurrent();
+            let csv = 'Project Name,' + (data.projectName || '') + '\n';
+            csv += 'Date,Session,Duration (HH:MM:SS)\n';
+            sessionsToExport.forEach(session => {
+                session.times.forEach((t, i) => {
+                    csv += `${session.date},${i+1},${formatTime(t)}\n`;
+                });
+            });
+            csv += `,,\n,,Overall Total:,${formatTime(getOverallTotal(sessionsToExport))}\n`;
+            const blob = new Blob([csv], {type: 'text/csv'});
+            if ('showSaveFilePicker' in window) {
+                try {
+                    const handle = await window.showSaveFilePicker({
+                        suggestedName: filename,
+                        types: [{
+                            description: 'CSV Files',
+                            accept: {'text/csv': ['.csv']}
+                        }]
+                    });
+                    const writable = await handle.createWritable();
+                    await writable.write(csv);
+                    await writable.close();
+                } catch (err) {
+                    // fallback to download if cancelled
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = filename;
+                    document.body.appendChild(a);
+                    a.click();
+                    setTimeout(() => {
+                        document.body.removeChild(a);
+                        URL.revokeObjectURL(url);
+                    }, 100);
+                }
+            } else {
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                setTimeout(() => {
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                }, 100);
+            }
+        }
+        // --- Markdown Export ---
+        async function exportMarkdown() {
+            let filename = (data.projectName ? data.projectName : 'FusionTimekeeper') + '.md';
+            let sessionsToExport = getSessionsWithCurrent();
+            let md = `# Fusion Timekeeper\n\n`;
+            md += `**Project Name:** ${data.projectName || ''}\n\n`;
+            md += `| Date | Session | Duration (HH:MM:SS) |\n|------|---------|-------------------|\n`;
+            sessionsToExport.forEach(session => {
+                session.times.forEach((t, i) => {
+                    md += `| ${session.date} | ${i+1} | ${formatTime(t)} |\n`;
+                });
+            });
+            md += `|  |  **Overall Total** | **${formatTime(getOverallTotal(sessionsToExport))}** |\n`;
+            const blob = new Blob([md], {type: 'text/markdown'});
+            if ('showSaveFilePicker' in window) {
+                try {
+                    const handle = await window.showSaveFilePicker({
+                        suggestedName: filename,
+                        types: [{
+                            description: 'Markdown Files',
+                            accept: {'text/markdown': ['.md']}
+                        }]
+                    });
+                    const writable = await handle.createWritable();
+                    await writable.write(md);
+                    await writable.close();
+                } catch (err) {
+                    // fallback to download if cancelled
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = filename;
+                    document.body.appendChild(a);
+                    a.click();
+                    setTimeout(() => {
+                        document.body.removeChild(a);
+                        URL.revokeObjectURL(url);
+                    }, 100);
+                }
+            } else {
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                setTimeout(() => {
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                }, 100);
             }
         }
         // --- Event Handlers ---
@@ -323,6 +482,8 @@
                         updateSessionList();
                         resetTimerUI();
                         fileHandle = null; // Reset file handle on import
+                        lastSavedTime = null;
+                        updateLastSaved();
                     } else {
                         alert('Invalid file format.');
                     }
@@ -332,6 +493,8 @@
             };
             reader.readAsText(file);
         });
+        csvBtn.addEventListener('click', exportCSV);
+        mdBtn.addEventListener('click', exportMarkdown);
         // --- Initialize ---
         function init() {
             data.projectName = '';
@@ -341,6 +504,8 @@
             updateDropdown();
             updateSessionList();
             resetTimerUI();
+            lastSavedTime = null;
+            updateLastSaved();
             // Set up auto-save every 5 minutes
             if (autoSaveInterval) clearInterval(autoSaveInterval);
             autoSaveInterval = setInterval(autoSave, 5 * 60 * 1000);
