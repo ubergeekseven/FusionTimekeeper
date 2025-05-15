@@ -512,27 +512,6 @@
                     // According to docs, first parameter is the action name, second is the data
                     let response = window.adsk.fusionSendData(action, dataToSend);
                     
-                    // Enhanced error checking for response
-                    if (response === null || response === undefined) {
-                        console.warn('Warning: fusionSendData returned null or undefined');
-                        // Return a formatted error message
-                        return JSON.stringify({
-                            success: false,
-                            message: 'Fusion API returned null or undefined response'
-                        });
-                    }
-                    
-                    // Handle Promise responses - Fusion API should not return Promises but check anyway
-                    if (response !== null && typeof response === 'object' && typeof response.then === 'function') {
-                        console.warn('Warning: fusionSendData returned a Promise - this might cause issues');
-                        // We can't return a Promise since our code expects a synchronous response
-                        // Just return a formatted message as a fallback
-                        return JSON.stringify({
-                            success: false,
-                            message: 'API returned a Promise which cannot be handled synchronously'
-                        });
-                    }
-                    
                     // Log the response
                     if (response) {
                         console.log(`Response received, length: ${response.length}`);
@@ -562,80 +541,124 @@
             }
         }
         
+        // NEW FUNCTION: Improved API communication wrapper
+        function sendFusionRequest(action, data) {
+            return new Promise((resolve, reject) => {
+                console.log(`Sending ${action} request to Fusion 360`);
+                
+                try {
+                    // Format data as JSON string if needed
+                    const dataToSend = typeof data === 'string' ? data : JSON.stringify(data || {});
+                    
+                    // Call the Fusion API
+                    const response = adskSendData(action, dataToSend);
+                    
+                    console.log(`${action} response type:`, typeof response);
+                    
+                    // Handle Promise response
+                    if (response && typeof response === 'object' && typeof response.then === 'function') {
+                        console.log(`${action} returned a Promise, resolving asynchronously`);
+                        
+                        // Wait for the Promise to resolve
+                        response
+                            .then(result => {
+                                try {
+                                    // Parse result if it's a string
+                                    if (typeof result === 'string') {
+                                        try {
+                                            const parsed = JSON.parse(result);
+                                            console.log(`${action} Promise resolved with parsed JSON data`);
+                                            resolve(parsed);
+                                        } catch (parseError) {
+                                            console.log(`${action} Promise resolved with non-JSON string`);
+                                            resolve(result);
+                                        }
+                                    } else {
+                                        console.log(`${action} Promise resolved with direct data`);
+                                        resolve(result);
+                                    }
+                                } catch (processingError) {
+                                    console.error(`Error processing ${action} Promise resolution:`, processingError);
+                                    reject(processingError);
+                                }
+                            })
+                            .catch(error => {
+                                console.error(`${action} Promise rejected:`, error);
+                                reject(error);
+                            });
+                    } 
+                    // Handle direct response
+                    else if (response) {
+                        console.log(`${action} returned direct response`);
+                        
+                        try {
+                            // Try to parse as JSON if it's a string
+                            if (typeof response === 'string') {
+                                try {
+                                    const parsed = JSON.parse(response);
+                                    console.log(`${action} direct response parsed as JSON`);
+                                    resolve(parsed);
+                                } catch (parseError) {
+                                    console.log(`${action} direct response is non-JSON string`);
+                                    resolve(response);
+                                }
+                            } else {
+                                console.log(`${action} direct response is object`);
+                                resolve(response);
+                            }
+                        } catch (processingError) {
+                            console.error(`Error processing ${action} direct response:`, processingError);
+                            reject(processingError);
+                        }
+                    }
+                    // Handle null/undefined response
+                    else {
+                        console.warn(`${action} returned null/undefined response`);
+                        resolve(null);
+                    }
+                } catch (error) {
+                    console.error(`Error sending ${action} request:`, error);
+                    reject(error);
+                }
+            });
+        }
+        
+        // Now update loadTimeData to use the improved wrapper
         function loadTimeData() {
             console.log('loadTimeData function called');
             if (footer) footer.textContent = 'Loading data from document...';
             
-            try {
-                // Send the request to load time data from parameters
-                console.log('Sending loadTimeData request to Fusion');
-                
-                // Use a Promise-aware approach
-                new Promise((resolve) => {
-                    const response = adskSendData('loadTimeData', '{}');
-                    console.log('loadTimeData response type:', typeof response);
-                    
-                    // Check if response is already a Promise
-                    if (response !== null && typeof response === 'object' && typeof response.then === 'function') {
-                        console.log('Response is a Promise, waiting for resolution');
-                        resolve(response); // Pass the Promise along
-                    } else {
-                        // It's a direct response
-                        console.log('Direct response received');
-                        resolve(response);
-                    }
-                })
+            sendFusionRequest('loadTimeData', {})
                 .then(result => {
-                    // This handles both direct responses and Promise resolution
-                    console.log('Processing loadTimeData result:', typeof result);
+                    console.log('loadTimeData result received:', result);
                     
-                    let jsonData;
-                    try {
-                        if (typeof result === 'string') {
-                            jsonData = JSON.parse(result);
-                            console.log('Parsed JSON data successfully');
-                        } else {
-                            jsonData = result;
-                            console.log('Result is already an object');
-                        }
+                    // Check for error response
+                    if (result && result.success === false) {
+                        console.warn('Error in loadTimeData response:', result.message);
+                        if (footer) footer.textContent = 'Error: ' + result.message;
+                        return false;
+                    }
+                    
+                    // Check for timeTracker data structure
+                    if (result && result.timeTracker && result.timeTracker.sessions) {
+                        console.log('Valid time data found:', result.timeTracker.sessions.length, 'sessions');
                         
-                        // Check for success/fail message format
-                        if (jsonData && jsonData.success === false) {
-                            console.warn('Error reported in response:', jsonData.message);
-                            if (footer) footer.textContent = 'Error: ' + jsonData.message;
-                            return false;
-                        }
-                        
-                        // Check for timeTracker data structure 
-                        if (jsonData && jsonData.timeTracker && jsonData.timeTracker.sessions) {
-                            console.log('Valid time data found:', jsonData.timeTracker.sessions.length, 'sessions');
-                            
-                            // Update UI with the data
-                            window.receiveDirectData(jsonData);
-                            return true;
-                        } else {
-                            console.warn('No valid time data in response');
-                            if (footer) footer.textContent = 'No valid time data found';
-                            return false;
-                        }
-                    } catch (e) {
-                        console.error('Error processing loadTimeData result:', e);
-                        if (footer) footer.textContent = 'Error processing data: ' + e.message;
+                        // Update UI with the data
+                        window.receiveDirectData(result);
+                        return true;
+                    } else {
+                        console.warn('No valid time data in response');
+                        if (footer) footer.textContent = 'No valid time data found';
                         return false;
                     }
                 })
-                .catch(err => {
-                    console.error('Promise chain error in loadTimeData:', err);
-                    if (footer) footer.textContent = 'Error loading data: ' + err.message;
+                .catch(error => {
+                    console.error('Error in loadTimeData:', error);
+                    if (footer) footer.textContent = 'Error loading data: ' + error.message;
                     return false;
                 });
-                
-                return true; // Return true to indicate request was sent
-            } catch (e) {
-                console.error('Error in loadTimeData:', e);
-                if (footer) footer.textContent = 'Error: ' + e.message;
-                return false;
-            }
+            
+            return true; // Return true to indicate request was initiated
         }
         
         function handleTimeDataLoaded(response) {
@@ -995,63 +1018,13 @@
                 });
         }
         
+        // Update loadCurrentParameterData to use the improved wrapper
         function loadCurrentParameterData() {
-            console.log('Attempting to directly load current parameter data');
-            
-            return new Promise((resolve) => {
-                try {
-                    const response = adskSendData('loadTimeData', '{}');
-                    
-                    // Check if response is a Promise
-                    if (response && typeof response === 'object' && typeof response.then === 'function') {
-                        console.log('loadCurrentParameterData received a Promise, waiting for resolution');
-                        
-                        // Wait for the Promise to resolve
-                        response.then(actualResponse => {
-                            console.log('Promise resolved in loadCurrentParameterData');
-                            
-                            try {
-                                const parsedData = typeof actualResponse === 'string' ? 
-                                    JSON.parse(actualResponse) : actualResponse;
-                                    
-                                if (parsedData && parsedData.timeTracker) {
-                                    console.log('Successfully extracted timeTracker data from Promise');
-                                    resolve(parsedData);
-                                } else {
-                                    console.warn('No valid timeTracker data in Promise response');
-                                    resolve({ timeTracker: { sessions: [] } });
-                                }
-                            } catch (parseErr) {
-                                console.error('Error parsing Promise data:', parseErr);
-                                resolve({ timeTracker: { sessions: [] } });
-                            }
-                        }).catch(err => {
-                            console.error('Promise rejected in loadCurrentParameterData:', err);
-                            resolve({ timeTracker: { sessions: [] } });
-                        });
-                    } else if (response) {
-                        // Process direct response
-                        try {
-                            const parsedData = typeof response === 'string' ? 
-                                JSON.parse(response) : response;
-                                
-                            console.log('Direct response received in loadCurrentParameterData');
-                            resolve(parsedData);
-                        } catch (parseErr) {
-                            console.error('Error parsing direct response:', parseErr);
-                            resolve({ timeTracker: { sessions: [] } });
-                        }
-                    } else {
-                        console.warn('Empty response in loadCurrentParameterData');
-                        resolve({ timeTracker: { sessions: [] } });
-                    }
-                } catch (e) {
-                    console.error('Error in loadCurrentParameterData:', e);
-                    resolve({ timeTracker: { sessions: [] } });
-                }
-            });
+            console.log('Attempting to load current parameter data');
+            return sendFusionRequest('loadTimeData', {});
         }
         
+        // Update saveToParameters to use the improved wrapper
         function saveToParameters() {
             try {
                 // Disable save button to prevent multiple saves
@@ -1071,35 +1044,13 @@
                 const footer = document.querySelector('.footer');
                 if (footer) footer.textContent = 'Saving data to document...';
                 
-                // Create a Promise wrapper for the save operation
-                new Promise((resolve) => {
-                    const response = adskSendData('saveTimeData', JSON.stringify({ 
-                        data: fullJson 
-                    }));
-                    
-                    // Handle both Promise and direct responses
-                    if (response !== null && typeof response === 'object' && typeof response.then === 'function') {
-                        console.log(`[${requestId}] saveTimeData returned Promise, resolving asynchronously`);
-                        resolve(response); // Pass along the Promise
-                    } else {
-                        console.log(`[${requestId}] saveTimeData returned direct response`);
-                        resolve(response); // Resolve with the direct response
-                    }
-                })
-                .then(result => {
-                    console.log(`[${requestId}] Processing save result:`, typeof result);
-                    
-                    try {
-                        // Parse the response if it's a string
-                        let jsonResult;
-                        if (typeof result === 'string') {
-                            jsonResult = JSON.parse(result);
-                        } else {
-                            jsonResult = result;
-                        }
+                // Use the improved wrapper
+                sendFusionRequest('saveTimeData', { data: fullJson })
+                    .then(result => {
+                        console.log(`[${requestId}] Save result:`, result);
                         
                         // Check for success
-                        if (jsonResult && jsonResult.success) {
+                        if (result && result.success) {
                             console.log(`[${requestId}] Save completed successfully`);
                             lastSavedTime = new Date();
                             updateLastSaved();
@@ -1111,26 +1062,22 @@
                                 }, 3000);
                             }
                         } else {
-                            const errorMsg = jsonResult && jsonResult.message ? jsonResult.message : 'Unknown error';
+                            const errorMsg = result && result.message ? result.message : 'Unknown error';
                             console.warn(`[${requestId}] Save operation failed: ${errorMsg}`);
                             
                             if (footer) {
                                 footer.textContent = `Save error: ${errorMsg}`;
                             }
                         }
-                    } catch (e) {
-                        console.error(`[${requestId}] Error processing save result:`, e);
-                        if (footer) footer.textContent = `Save error: ${e.message}`;
-                    } finally {
+                    })
+                    .catch(error => {
+                        console.error(`[${requestId}] Error saving data:`, error);
+                        if (footer) footer.textContent = `Save error: ${error.message || 'Unknown error'}`;
+                    })
+                    .finally(() => {
                         // Always re-enable the save button
                         if (saveBtn) saveBtn.disabled = false;
-                    }
-                })
-                .catch(err => {
-                    console.error(`[${requestId}] Save operation error:`, err);
-                    if (footer) footer.textContent = `Save error: ${err.message || 'Unknown error'}`;
-                    if (saveBtn) saveBtn.disabled = false;
-                });
+                    });
                 
                 return true;
             } catch (err) {
@@ -1277,104 +1224,87 @@
             resetTimerUI();
             updateLastSaved();
             
-            // Attempt to load data from Fusion 360
-            console.log('Sending paletteLoaded event to get initial data...');
+            // Load data using our improved Promise-based approach
+            console.log('Loading initial palette data...');
             
-            new Promise((resolve) => {
-                try {
-                    // First try with paletteLoaded
-                    const response = adskSendData('paletteLoaded', '{}');
-                    resolve(response);
-                } catch (e) {
-                    console.error('Error sending paletteLoaded:', e);
-                    resolve(null);
-                }
-            })
-            .then(response => {
-                if (response && typeof response === 'object' && typeof response.then === 'function') {
-                    // It's a Promise
-                    return response;
-                }
-                return Promise.resolve(response);
-            })
-            .then(result => {
-                // Process the response from paletteLoaded
-                console.log('Processing paletteLoaded result');
-                
-                let initialDataLoaded = false;
-                
-                // Try to extract data from the response
-                if (result) {
-                    try {
-                        const initialData = typeof result === 'string' ? JSON.parse(result) : result;
-                        
-                        if (initialData.success && initialData.timeData) {
-                            // Use the time data from response
-                            console.log('Found time data in initial response');
-                            window.receiveDirectData(initialData.timeData);
-                            initialDataLoaded = true;
-                        }
-                    } catch (e) {
-                        console.error('Error processing initial data:', e);
-                    }
-                }
-                
-                // If no data loaded yet, try loadTimeData directly
-                if (!initialDataLoaded) {
-                    console.log('No data from paletteLoaded, trying direct loadTimeData');
-                    setTimeout(() => {
-                        loadTimeData();
-                    }, 500);
-                }
-            })
-            .catch(err => {
-                console.error('Error in init sequence:', err);
-                
-                // Try direct loadTimeData as fallback
-                setTimeout(() => {
-                    loadTimeData();
-                }, 500);
-            });
-            
-            // Add a retry mechanism for loading data
-            setTimeout(() => {
-                console.log('Checking if data was loaded successfully...');
-                if (!data.sessions || data.sessions.length === 0) {
-                    console.log('No data loaded yet, trying again...');
-                    loadTimeData();
+            // Try loading data with paletteLoaded first
+            sendFusionRequest('paletteLoaded', {})
+                .then(initialData => {
+                    console.log('paletteLoaded response received:', initialData);
                     
-                    // Double check after another delay
-                    setTimeout(() => {
-                        if (!data.sessions || data.sessions.length === 0) {
-                            console.log('Still no data, trying direct method...');
-                            if (footer) {
-                                footer.textContent = 'Making final attempt to load data...';
-                            }
-                            loadTimeData();
-                            
-                            // Last resort - try emergency direct parameter reading
-                            setTimeout(() => {
-                                if (!data.sessions || data.sessions.length === 0) {
-                                    console.log('All standard attempts failed, trying emergency recovery...');
-                                    if (footer) {
-                                        footer.textContent = 'Standard methods failed. Trying emergency recovery...';
-                                    }
-                                    // Make sure readRawParameters is defined before calling it
-                                    if (typeof window.readRawParameters === 'function') {
-                                        window.readRawParameters();
-                                    } else {
-                                        console.error('readRawParameters function not available');
-                                        if (footer) {
-                                            footer.textContent = 'Emergency recovery failed: function not available';
-                                        }
-                                        activateEmergencyMode();
-                                    }
-                                }
-                            }, 2000);
+                    // Check if we got valid data back
+                    if (initialData && initialData.success && initialData.timeData) {
+                        console.log('Valid data found in paletteLoaded response');
+                        
+                        // Process the data
+                        window.receiveDirectData(initialData.timeData);
+                        
+                        // Store project info if available
+                        if (initialData.projectInfo) {
+                            projectInfo = initialData.projectInfo;
+                            console.log('Project info loaded:', projectInfo);
                         }
-                    }, 2000);
-                }
-            }, 2000);
+                        
+                        return true; // Data loaded successfully
+                    } else {
+                        console.log('No valid data in paletteLoaded response, trying loadTimeData');
+                        // Try loadTimeData as fallback
+                        return loadTimeData();
+                    }
+                })
+                .catch(error => {
+                    console.error('Error during paletteLoaded:', error);
+                    
+                    // Try loadTimeData as fallback
+                    console.log('Trying loadTimeData as fallback after error');
+                    return loadTimeData();
+                });
+            
+            // Add a retry mechanism for loading data with progressive delays
+            const retryDelays = [2000, 4000, 8000]; // Try at 2s, 6s (2+4), and 14s (2+4+8)
+            
+            retryDelays.forEach((delay, index) => {
+                setTimeout(() => {
+                    console.log(`Retry check ${index + 1}: Checking if data was loaded successfully...`);
+                    
+                    if (!data.sessions || data.sessions.length === 0) {
+                        console.log(`No data loaded yet (attempt ${index + 1}), trying again...`);
+                        
+                        // Each retry uses a different approach
+                        if (index === 0) {
+                            // First retry: Try loadTimeData again
+                            loadTimeData();
+                        } else if (index === 1) {
+                            // Second retry: Try direct parameter access
+                            console.log('Still no data, trying direct parameter access...');
+                            if (footer) footer.textContent = 'Trying direct parameter access...';
+                            
+                            sendFusionRequest('readRawParameters', {})
+                                .then(paramData => {
+                                    console.log('Raw parameters received:', paramData);
+                                    
+                                    if (paramData && paramData.rawParameters && paramData.rawParameters.length > 0) {
+                                        processRawParametersResponse(paramData);
+                                    } else {
+                                        console.warn('No parameters found in document');
+                                        if (footer) footer.textContent = 'No parameters found in document';
+                                    }
+                                })
+                                .catch(error => {
+                                    console.error('Error reading raw parameters:', error);
+                                });
+                        } else {
+                            // Final retry: If still no data, show emergency mode
+                            console.log('All standard attempts failed, activating emergency recovery mode');
+                            if (footer) {
+                                footer.textContent = 'Unable to load data automatically. Please try manual recovery.';
+                                footer.style.color = '#ff5722';
+                            }
+                            activateEmergencyMode();
+                        }
+                    }
+                }, retryDelays.slice(0, index + 1).reduce((a, b) => a + b, 0));
+            });
             
             // Set up auto-save every 5 minutes
             if (autoSaveInterval) clearInterval(autoSaveInterval);
