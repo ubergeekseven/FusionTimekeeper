@@ -33,11 +33,10 @@ IS_PROMOTED = True
 # Define the location where the command button will be created
 WORKSPACE_ID = 'FusionSolidEnvironment'  # Design workspace (Solid)
 TAB_ID = 'SolidTab'                      # The built-in Solid tab
-PANEL_ID = 'SolidCreatePanel'            # The built-in Create panel
 
-# Define the dropdown information
-DROPDOWN_ID = 'TimeTrackerDropdown'
-DROPDOWN_NAME = 'Time Tracker Tools'
+# Define our custom panel within the Solid tab
+CUSTOM_PANEL_ID = 'TimeTrackerPanel'
+CUSTOM_PANEL_NAME = 'Time Tracking'
 
 # Resource locations for command icons
 TIMEKEEPER_ICON_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'resources', 'timekeeper_icon')
@@ -130,23 +129,37 @@ class FusionTimekeeperCommand:
             )
             workspace = self.ui.workspaces.itemById(WORKSPACE_ID)
             if workspace:
+                # First, check all panels for existing controls with our CMD_ID and remove them
+                for tab in workspace.toolbarTabs:
+                    for panel in tab.toolbarPanels:
+                        for i in range(panel.controls.count):
+                            try:
+                                if panel.controls.item(i).id == CMD_ID:
+                                    panel.controls.item(i).deleteMe()
+                                    break
+                            except:
+                                # Skip any errors (control might be of a type that doesn't have an id)
+                                pass
+                
                 tab = workspace.toolbarTabs.itemById(TAB_ID)
                 if tab:
-                    panel = tab.toolbarPanels.itemById(PANEL_ID)
-                    if panel:
-                        # Add or get the dropdown
-                        dropdown = panel.controls.itemById(DROPDOWN_ID)
-                        if not dropdown:
-                            dropdown = panel.controls.addDropDown(
-                                DROPDOWN_ID, DROPDOWN_NAME, '', ''
-                            )
-                        control = dropdown.controls.addCommand(self.cmd_def)
-                        control.isPromoted = IS_PROMOTED
-                        handler = TimeTrackerCommandCreatedHandler(self.time_tracker)
-                        self.cmd_def.commandCreated.add(handler)
-                        self.handlers.append(handler)
-                    else:
-                        self.ui.messageBox(f'Panel {PANEL_ID} not found')
+                    # Create our own panel in the Solid tab
+                    panel = tab.toolbarPanels.itemById(CUSTOM_PANEL_ID)
+                    if not panel:
+                        panel = tab.toolbarPanels.add(CUSTOM_PANEL_ID, CUSTOM_PANEL_NAME)
+                    
+                    # Remove any existing controls with our ID
+                    for i in range(panel.controls.count):
+                        if panel.controls.item(i).id == CMD_ID:
+                            panel.controls.item(i).deleteMe()
+                            break
+                    
+                    # Add the command to our custom panel
+                    control = panel.controls.addCommand(self.cmd_def)
+                    control.isPromoted = IS_PROMOTED
+                    handler = TimeTrackerCommandCreatedHandler(self.time_tracker)
+                    self.cmd_def.commandCreated.add(handler)
+                    self.handlers.append(handler)
                 else:
                     self.ui.messageBox(f'Tab {TAB_ID} not found')
             else:
@@ -177,23 +190,37 @@ class NotesCommand:
             )
             workspace = self.ui.workspaces.itemById(WORKSPACE_ID)
             if workspace:
+                # First, check all panels for existing controls with our NOTES_CMD_ID and remove them
+                for tab in workspace.toolbarTabs:
+                    for panel in tab.toolbarPanels:
+                        for i in range(panel.controls.count):
+                            try:
+                                if panel.controls.item(i).id == NOTES_CMD_ID:
+                                    panel.controls.item(i).deleteMe()
+                                    break
+                            except:
+                                # Skip any errors (control might be of a type that doesn't have an id)
+                                pass
+                
                 tab = workspace.toolbarTabs.itemById(TAB_ID)
                 if tab:
-                    panel = tab.toolbarPanels.itemById(PANEL_ID)
-                    if panel:
-                        # Add or get the dropdown
-                        dropdown = panel.controls.itemById(DROPDOWN_ID)
-                        if not dropdown:
-                            dropdown = panel.controls.addDropDown(
-                                DROPDOWN_ID, DROPDOWN_NAME, '', ''
-                            )
-                        control = dropdown.controls.addCommand(self.cmd_def)
-                        control.isPromoted = IS_PROMOTED
-                        handler = NotesCommandCreatedHandler()
-                        self.cmd_def.commandCreated.add(handler)
-                        self.handlers.append(handler)
-                    else:
-                        self.ui.messageBox(f'Panel {PANEL_ID} not found')
+                    # Use our custom panel in the Solid tab
+                    panel = tab.toolbarPanels.itemById(CUSTOM_PANEL_ID)
+                    if not panel:
+                        panel = tab.toolbarPanels.add(CUSTOM_PANEL_ID, CUSTOM_PANEL_NAME)
+                    
+                    # Remove any existing controls with our ID
+                    for i in range(panel.controls.count):
+                        if panel.controls.item(i).id == NOTES_CMD_ID:
+                            panel.controls.item(i).deleteMe()
+                            break
+                    
+                    # Add the command to our custom panel
+                    control = panel.controls.addCommand(self.cmd_def)
+                    control.isPromoted = IS_PROMOTED
+                    handler = NotesCommandCreatedHandler()
+                    self.cmd_def.commandCreated.add(handler)
+                    self.handlers.append(handler)
                 else:
                     self.ui.messageBox(f'Tab {TAB_ID} not found')
             else:
