@@ -438,21 +438,27 @@
                                 lastSavedTime = new Date();
                                 updateLastSaved();
                                 
-                                footer.textContent = `✅ Loaded ${data.sessions.length} session(s) with ${data.sessions[0]?.times.length || 0} time entries`;
+                                if (footer) {
+                                    footer.textContent = `✅ Loaded ${data.sessions.length} session(s) successfully`;
+                                }
                                 
                                 console.log('UI updated successfully via direct handler');
                                 
                                 // Log generated HTML for debugging
-                                console.log('Dropdown HTML:', dateDropdown.innerHTML);
-                                console.log('Session list HTML:', sessionList.innerHTML);
+                                if (dateDropdown) console.log('Dropdown HTML:', dateDropdown.innerHTML);
+                                if (sessionList) console.log('Session list HTML:', sessionList.innerHTML);
                             } catch (uiError) {
                                 console.error('Error updating UI:', uiError);
                                 console.error('Error stack:', uiError.stack);
-                                footer.textContent = 'Error updating UI: ' + uiError.message;
+                                if (footer) {
+                                    footer.textContent = 'Error updating UI: ' + uiError.message;
+                                }
                             }
                         } else {
                             console.warn('Invalid or empty data in loadTimeData response');
-                            footer.textContent = 'No valid time data in response';
+                            if (footer) {
+                                footer.textContent = 'No valid time data in response';
+                            }
                         }
                         
                         // No need to continue with other switch cases for loadTimeData
@@ -571,6 +577,40 @@
                 
                 console.log('RESPONSE DEBUG:', response.substring && response.substring(0, 100));
                 
+                // Handle both Promise and direct responses
+                if (response !== null && typeof response === 'object' && typeof response.then === 'function') {
+                    // It's a Promise - handle asynchronously
+                    console.log('Handling Promise response from Fusion API');
+                    response.then(actualResponse => {
+                        console.log('Promise resolved with response:', typeof actualResponse);
+                        if (actualResponse) {
+                            try {
+                                const data = typeof actualResponse === 'string' ? JSON.parse(actualResponse) : actualResponse;
+                                console.log('Promise data parsed successfully');
+                                
+                                // Process the data through fusionJavaScriptHandler
+                                if (window.fusionJavaScriptHandler && window.fusionJavaScriptHandler.handle) {
+                                    window.fusionJavaScriptHandler.handle('loadTimeData', JSON.stringify(data));
+                                    console.log('Data processed via fusionJavaScriptHandler');
+                                } else {
+                                    console.error('fusionJavaScriptHandler not available for promise data');
+                                }
+                            } catch (e) {
+                                console.error('Error processing promise response:', e);
+                                footer.textContent = 'Error processing data: ' + e.message;
+                            }
+                        }
+                    }).catch(err => {
+                        console.error('Promise was rejected:', err);
+                        footer.textContent = 'Error loading data: ' + (err.message || 'Promise failed');
+                    });
+                    
+                    // Since we're handling asynchronously, we're not immediately returning data
+                    console.log('Asynchronous data handling in progress');
+                    return true; // Indicate the request was sent successfully
+                }
+                
+                // Original synchronous handling
                 // Response processing now happens in the fusionJavaScriptHandler.handle
                 // This function just needs to send the request
                 console.log('Request sent successfully - UI will update via handler');
@@ -707,7 +747,7 @@
             if (startTime) {
                 total += Math.floor((Date.now() - startTime) / 1000);
             }
-            timeDisplay.textContent = formatTime(total);
+            if (timeDisplay) timeDisplay.textContent = formatTime(total);
         }
         
         function updateDropdown() {
@@ -722,6 +762,11 @@
             if (!data.sessions) {
                 console.error('ERROR: data.sessions is missing in updateDropdown');
                 data.sessions = [];
+            }
+            
+            if (!dateDropdown) {
+                console.error('ERROR: dateDropdown element is null/undefined in updateDropdown');
+                return;
             }
             
             console.log(`updateDropdown with ${data.sessions.length} sessions`);
@@ -910,7 +955,13 @@
                 const response = adskSendData('loadTimeData', '{}');
                 
                 if (response) {
-                    if (typeof response === 'string') {
+                    // Check if response is a Promise
+                    if (typeof response === 'object' && typeof response.then === 'function') {
+                        // Can't handle Promise synchronously in this function
+                        console.log('loadCurrentParameterData received a Promise - cannot handle synchronously');
+                        // Return empty data to avoid errors, data will be loaded through Promise handler
+                        return { timeTracker: { sessions: [] } };
+                    } else if (typeof response === 'string') {
                         return JSON.parse(response);
                     } else {
                         return response;
@@ -984,15 +1035,47 @@
                     console.log(`[${requestId}] saveTimeData returned Promise, waiting...`);
                     response.then(actualResponse => {
                         console.log(`[${requestId}] Promise resolved with response`);
-                        processResponse(actualResponse);
+                        
+                        // If successful response, update the UI and data
+                        if (actualResponse) {
+                            try {
+                                const result = typeof actualResponse === 'string' ? 
+                                    JSON.parse(actualResponse) : actualResponse;
+                                
+                                if (result.success) {
+                                    console.log(`[${requestId}] Save completed successfully via Promise`);
+                                    lastSavedTime = new Date();
+                                    updateLastSaved();
+                                    
+                                    footer.textContent = 'Data saved successfully to document parameters';
+                                    setTimeout(() => {
+                                        footer.textContent = 'Time tracking data is stored with your Fusion 360 document using parameters';
+                                    }, 3000);
+                                } else {
+                                    console.warn(`[${requestId}] Save via Promise returned error:`, 
+                                        result.message || 'Unknown error');
+                                    footer.textContent = `Save error: ${result.message || 'Unknown error'}`;
+                                }
+                            } catch (e) {
+                                console.error(`[${requestId}] Error parsing Promise response:`, e);
+                                footer.textContent = `Save error: ${e.message}`;
+                            }
+                        }
+                        
+                        saveBtn.disabled = false;
                     }).catch(err => {
                         console.error(`[${requestId}] Promise rejected:`, err);
                         footer.textContent = `Save error: ${err.message || 'Promise error'}`;
                         saveBtn.disabled = false;
                     });
-                } else {
+                } else if (response) {
                     // Direct response
                     processResponse(response);
+                } else {
+                    // No response
+                    console.error(`[${requestId}] No response from save operation`);
+                    footer.textContent = 'Error: No response from save operation';
+                    saveBtn.disabled = false;
                 }
             } catch (err) {
                 console.error('Failed to save to parameters:', err);
@@ -1007,9 +1090,10 @@
             startTime = null;
             clearInterval(timerInterval);
             updateDisplay();
-            startBtn.disabled = false;
-            stopBtn.disabled = true;
-            resetBtn.disabled = true;
+            
+            if (startBtn) startBtn.disabled = false;
+            if (stopBtn) stopBtn.disabled = true;
+            if (resetBtn) resetBtn.disabled = true;
         }
         
         // --- File Save/Load Functions ---
@@ -1113,7 +1197,11 @@
             fullJson = { timeTracker: data };
             
             // Show initializing message
-            footer.textContent = 'Initializing palette and loading data...';
+            if (footer) {
+                footer.textContent = 'Initializing palette and loading data...';
+            } else {
+                console.warn('Footer element not found during initialization');
+            }
             
             // Send a paletteLoaded event to get initial data
             console.log('Sending paletteLoaded event to get initial data...');
@@ -1121,7 +1209,29 @@
                 const response = adskSendData('paletteLoaded', '{}');
                 console.log('paletteLoaded response received');
                 
-                if (typeof response === 'string' && response.trim()) {
+                // Handle Promise response
+                if (response !== null && typeof response === 'object' && typeof response.then === 'function') {
+                    console.log('paletteLoaded returned a Promise, handling asynchronously');
+                    
+                    response.then(actualResponse => {
+                        console.log('Promise resolved with paletteLoaded data');
+                        if (actualResponse && typeof actualResponse === 'string' && actualResponse.trim()) {
+                            try {
+                                const initialData = JSON.parse(actualResponse);
+                                processInitialResponse(initialData, 'promise');
+                            } catch (e) {
+                                console.error('Error parsing promise response:', e);
+                                setTimeout(loadTimeData, 500);
+                            }
+                        } else {
+                            console.warn('Empty or invalid promise response, trying loadTimeData');
+                            setTimeout(loadTimeData, 500);
+                        }
+                    }).catch(err => {
+                        console.error('Promise rejected in paletteLoaded:', err);
+                        setTimeout(loadTimeData, 500);
+                    });
+                } else if (typeof response === 'string' && response.trim()) {
                     try {
                         const initialData = JSON.parse(response);
                         console.log('Processing initial data from palette load');
@@ -1151,7 +1261,9 @@
                             updateLastSaved();
                             
                             console.log('Initial data loaded successfully');
-                            footer.textContent = `Loaded ${data.sessions.length} session(s) from initial data`;
+                            if (footer) {
+                                footer.textContent = `Loaded ${data.sessions.length} session(s) from initial data`;
+                            }
                         } else {
                             console.warn('No valid time data in initial response, trying loadTimeData');
                             // Try direct loadTimeData approach
@@ -1191,20 +1303,34 @@
                     setTimeout(() => {
                         if (!data.sessions || data.sessions.length === 0) {
                             console.log('Still no data, trying direct method...');
-                            footer.textContent = 'Making final attempt to load data...';
+                            if (footer) {
+                                footer.textContent = 'Making final attempt to load data...';
+                            }
                             loadTimeData();
                             
                             // Last resort - try emergency direct parameter reading
                             setTimeout(() => {
                                 if (!data.sessions || data.sessions.length === 0) {
                                     console.log('All standard attempts failed, trying emergency recovery...');
-                                    footer.textContent = 'Standard methods failed. Trying emergency recovery...';
-                                    window.readRawParameters();
+                                    if (footer) {
+                                        footer.textContent = 'Standard methods failed. Trying emergency recovery...';
+                                    }
+                                    // Make sure readRawParameters is defined before calling it
+                                    if (typeof window.readRawParameters === 'function') {
+                                        window.readRawParameters();
+                                    } else {
+                                        console.error('readRawParameters function not available');
+                                        if (footer) {
+                                            footer.textContent = 'Emergency recovery failed: function not available';
+                                        }
+                                    }
                                     
                                     // Add emergency button if that fails too
                                     setTimeout(() => {
                                         if (!data.sessions || data.sessions.length === 0) {
-                                            footer.textContent = 'All automatic recovery methods failed.';
+                                            if (footer) {
+                                                footer.textContent = 'All automatic recovery methods failed.';
+                                            }
                                             
                                             // Add an emergency manual button
                                             const emergencyBtn = document.createElement('button');
@@ -1212,12 +1338,21 @@
                                             emergencyBtn.style.backgroundColor = '#f44336';
                                             emergencyBtn.textContent = 'Emergency Recovery';
                                             emergencyBtn.addEventListener('click', () => {
-                                                window.readRawParameters();
+                                                if (typeof window.readRawParameters === 'function') {
+                                                    window.readRawParameters();
+                                                } else {
+                                                    console.error('readRawParameters function not available');
+                                                    if (footer) {
+                                                        footer.textContent = 'Emergency recovery failed: function not available';
+                                                    }
+                                                }
                                             });
                                             
                                             // Add button after footer
                                             const container = document.querySelector('.container');
-                                            container.appendChild(emergencyBtn);
+                                            if (container) {
+                                                container.appendChild(emergencyBtn);
+                                            }
                                         }
                                     }, 3000);
                                 }
@@ -1357,7 +1492,7 @@
         // Add a method to directly extract and process time parameters in emergencies
         window.readRawParameters = function() {
             console.log('EMERGENCY: Attempting direct parameter reading');
-            footer.textContent = 'Attempting emergency direct parameter reading...';
+            if (footer) footer.textContent = 'Attempting emergency direct parameter reading...';
             
             try {
                 const response = adskSendData('readRawParameters', '{}');
@@ -1365,96 +1500,125 @@
                 
                 if (!response) {
                     console.error('Error: No response from readRawParameters');
+                    if (footer) footer.textContent = 'Error: No response from readRawParameters';
                     return false;
                 }
                 
-                try {
-                    // Parse the response
-                    const parsed = (typeof response === 'string') ? JSON.parse(response) : response;
-                    console.log('Raw parameter data:', parsed);
+                // Handle Promise response
+                if (response !== null && typeof response === 'object' && typeof response.then === 'function') {
+                    console.log('readRawParameters returned a Promise, handling asynchronously');
                     
-                    if (!parsed || !parsed.rawParameters) {
-                        console.error('No raw parameters found');
-                        return false;
-                    }
-                    
-                    // Extract time parameters
-                    const timeParams = parsed.rawParameters.filter(p => 
-                        p.name.startsWith('Time') && !isNaN(parseFloat(p.name.substring(4)))
-                    );
-                    
-                    console.log(`Found ${timeParams.length} time parameters`);
-                    if (timeParams.length === 0) return false;
-                    
-                    // Group by date from comments
-                    const sessionsByDate = {};
-                    
-                    // Extract dates and times
-                    timeParams.forEach(param => {
-                        try {
-                            // Extract date from comment
-                            let date = "Unknown";
-                            if (param.comment && param.comment.includes("Time entry on ")) {
-                                date = param.comment.replace("Time entry on ", "").trim();
-                            }
-                            
-                            // Parse the value
-                            let value = 0;
-                            try {
-                                if (param.value) {
-                                    value = parseFloat(param.value);
-                                } else if (param.rawExpression) {
-                                    value = parseFloat(param.rawExpression);
-                                }
-                            } catch (e) {
-                                console.error('Error parsing value:', e);
-                            }
-                            
-                            // Add to sessions by date
-                            if (!sessionsByDate[date]) {
-                                sessionsByDate[date] = [];
-                            }
-                            
-                            if (!isNaN(value) && value > 0) {
-                                sessionsByDate[date].push(value);
-                            }
-                        } catch (e) {
-                            console.error('Error processing parameter:', e);
-                        }
+                    response.then(actualResponse => {
+                        console.log('Promise resolved with readRawParameters data');
+                        processRawParametersResponse(actualResponse);
+                    }).catch(err => {
+                        console.error('Promise rejected in readRawParameters:', err);
+                        if (footer) footer.textContent = 'Error reading parameters: ' + (err.message || 'Promise error');
                     });
                     
-                    // Convert to sessions array
-                    const sessions = [];
-                    for (const date in sessionsByDate) {
-                        sessions.push({
-                            "date": date,
-                            "times": sessionsByDate[date]
-                        });
-                    }
-                    
-                    // Update global data
-                    if (sessions.length > 0) {
-                        console.log('Successfully reconstructed sessions:', sessions);
-                        data = { sessions: sessions };
-                        fullJson = { timeTracker: data };
-                        
-                        // Update UI
-                        currentDate = sessions[sessions.length - 1].date;
-                        updateDropdown();
-                        updateSessionList();
-                        
-                        footer.textContent = `Emergency recovery: Loaded ${sessions.length} session(s)`;
-                        return true;
-                    }
-                } catch (e) {
-                    console.error('Error parsing raw parameters:', e);
+                    return true; // Indicate we've started the process
+                } else {
+                    // Process synchronous response
+                    return processRawParametersResponse(response);
                 }
             } catch (e) {
                 console.error('Error in readRawParameters:', e);
+                if (footer) footer.textContent = 'Error reading parameters: ' + e.message;
+                return false;
+            }
+        };
+        
+        // Helper function to process raw parameters response
+        function processRawParametersResponse(response) {
+            try {
+                // Parse the response
+                const parsed = (typeof response === 'string') ? JSON.parse(response) : response;
+                console.log('Raw parameter data:', parsed);
+                
+                if (!parsed || !parsed.rawParameters) {
+                    console.error('No raw parameters found');
+                    if (footer) footer.textContent = 'Error: No parameters found';
+                    return false;
+                }
+                
+                // Extract time parameters
+                const timeParams = parsed.rawParameters.filter(p => 
+                    p.name.startsWith('Time') && !isNaN(parseFloat(p.name.substring(4)))
+                );
+                
+                console.log(`Found ${timeParams.length} time parameters`);
+                if (timeParams.length === 0) {
+                    if (footer) footer.textContent = 'No time parameters found';
+                    return false;
+                }
+                
+                // Group by date from comments
+                const sessionsByDate = {};
+                
+                // Extract dates and times
+                timeParams.forEach(param => {
+                    try {
+                        // Extract date from comment
+                        let date = "Unknown";
+                        if (param.comment && param.comment.includes("Time entry on ")) {
+                            date = param.comment.replace("Time entry on ", "").trim();
+                        }
+                        
+                        // Parse the value
+                        let value = 0;
+                        try {
+                            if (param.value) {
+                                value = parseFloat(param.value);
+                            } else if (param.rawExpression) {
+                                value = parseFloat(param.rawExpression);
+                            }
+                        } catch (e) {
+                            console.error('Error parsing value:', e);
+                        }
+                        
+                        // Add to sessions by date
+                        if (!sessionsByDate[date]) {
+                            sessionsByDate[date] = [];
+                        }
+                        
+                        if (!isNaN(value) && value > 0) {
+                            sessionsByDate[date].push(value);
+                        }
+                    } catch (e) {
+                        console.error('Error processing parameter:', e);
+                    }
+                });
+                
+                // Convert to sessions array
+                const sessions = [];
+                for (const date in sessionsByDate) {
+                    sessions.push({
+                        "date": date,
+                        "times": sessionsByDate[date]
+                    });
+                }
+                
+                // Update global data
+                if (sessions.length > 0) {
+                    console.log('Successfully reconstructed sessions:', sessions);
+                    data = { sessions: sessions };
+                    fullJson = { timeTracker: data };
+                    
+                    // Update UI
+                    currentDate = sessions[sessions.length - 1].date;
+                    updateDropdown();
+                    updateSessionList();
+                    
+                    if (footer) footer.textContent = `Emergency recovery: Loaded ${sessions.length} session(s)`;
+                    return true;
+                }
+            } catch (e) {
+                console.error('Error parsing raw parameters:', e);
+                if (footer) footer.textContent = 'Error parsing parameters: ' + e.message;
             }
             
             return false;
-        };
+        }
     </script>
 </body>
 </html> 
