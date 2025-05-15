@@ -512,13 +512,24 @@
                     // According to docs, first parameter is the action name, second is the data
                     let response = window.adsk.fusionSendData(action, dataToSend);
                     
-                    // Log the response
+                    // Log the response - SAFELY check type first
                     if (response) {
-                        console.log(`Response received, length: ${response.length}`);
-                        if (response.length < 100) {
-                            console.log(`Response content: ${response}`);
-                        } else {
-                            console.log(`Response content (first 100 chars): ${response.substring(0, 100)}...`);
+                        console.log(`Response received, type: ${typeof response}`);
+                        
+                        // Only use string methods if it's actually a string
+                        if (typeof response === 'string') {
+                            console.log(`Response length: ${response.length}`);
+                            if (response.length < 100) {
+                                console.log(`Response content: ${response}`);
+                            } else {
+                                console.log(`Response content (first 100 chars): ${response.substring(0, 100)}...`);
+                            }
+                        } else if (typeof response === 'object') {
+                            console.log('Response is an object, not a string');
+                            // Handle Promise specially
+                            if (response && typeof response.then === 'function') {
+                                console.log('Response is a Promise');
+                            }
                         }
                     } else {
                         console.log('No response or empty response received');
@@ -1403,12 +1414,31 @@
                 let receivedData;
                 if (typeof jsonData === 'string') {
                     console.log("Raw data received (string format):", jsonData.substring(0, 100) + (jsonData.length > 100 ? '...' : ''));
-                    try {
-                        receivedData = JSON.parse(jsonData);
-                    } catch (parseErr) {
-                        console.error("Error parsing JSON data:", parseErr);
-                        if (footer) footer.textContent = `Error parsing data: ${parseErr.message}`;
-                        return false;
+                    
+                    // Check if the string is HTML-encoded and decode if needed
+                    if (jsonData.includes('&quot;')) {
+                        console.log("HTML-encoded JSON detected, decoding...");
+                        // Create a temporary div to decode HTML entities
+                        const tempDiv = document.createElement('div');
+                        tempDiv.innerHTML = jsonData;
+                        const decodedJson = tempDiv.textContent;
+                        console.log("Decoded JSON:", decodedJson.substring(0, 100) + (decodedJson.length > 100 ? '...' : ''));
+                        
+                        try {
+                            receivedData = JSON.parse(decodedJson);
+                        } catch (decodeErr) {
+                            console.error("Error parsing decoded JSON:", decodeErr);
+                            // Try original string as fallback
+                            receivedData = JSON.parse(jsonData);
+                        }
+                    } else {
+                        try {
+                            receivedData = JSON.parse(jsonData);
+                        } catch (parseErr) {
+                            console.error("Error parsing JSON data:", parseErr);
+                            if (footer) footer.textContent = `Error parsing data: ${parseErr.message}`;
+                            return false;
+                        }
                     }
                 } else {
                     console.log("Raw data received (object format)");
@@ -1499,11 +1529,13 @@
             
             try {
                 const response = adskSendData('readRawParameters', '{}');
-                console.log('Raw parameters response received:', typeof response);
+                console.log('Raw parameters response type:', typeof response);
                 
                 if (!response) {
                     console.error('Error: No response from readRawParameters');
                     if (footer) footer.textContent = 'Error: No response from readRawParameters';
+                    // Show emergency UI for manual data entry
+                    const emergencyDiv = activateEmergencyMode();
                     return false;
                 }
                 
@@ -1512,27 +1544,90 @@
                     console.log('readRawParameters returned a Promise, handling asynchronously');
                     
                     response.then(actualResponse => {
-                        console.log('Promise resolved with readRawParameters data');
+                        console.log('Promise resolved with readRawParameters data type:', typeof actualResponse);
+                        if (typeof actualResponse === 'string') {
+                            console.log('readRawParameters data (first 100 chars):', actualResponse.substring(0, 100) + '...');
+                        }
+                        
                         const result = processRawParametersResponse(actualResponse);
                         if (result) {
                             console.log('Successfully processed emergency data via Promise');
                         } else {
                             console.error('Failed to process emergency data via Promise');
                             if (footer) footer.textContent = 'Emergency recovery failed via Promise';
+                            // Show emergency UI for manual data entry
+                            const emergencyDiv = activateEmergencyMode();
                         }
                     }).catch(err => {
                         console.error('Promise rejected in readRawParameters:', err);
                         if (footer) footer.textContent = 'Error reading parameters: ' + (err.message || 'Promise error');
+                        // Show emergency UI for manual data entry
+                        const emergencyDiv = activateEmergencyMode();
                     });
                     
                     return true; // Indicate we've started the process
                 } else {
                     // Process synchronous response
-                    return processRawParametersResponse(response);
+                    if (typeof response === 'string') {
+                        console.log('readRawParameters returned string data (first 100 chars):', 
+                            response.substring(0, 100) + (response.length > 100 ? '...' : ''));
+                    }
+                    
+                    const result = processRawParametersResponse(response);
+                    if (!result) {
+                        // Show emergency UI for manual data entry if processing failed
+                        const emergencyDiv = activateEmergencyMode();
+                        
+                        // Add an option for direct injection when everything else fails
+                        if (data.sessions && data.sessions.length > 0) {
+                            console.log('Using current memory data as emergency backup');
+                            // Current data is available, offer to use it
+                            if (confirm('Unable to read parameters, but existing session data is in memory.' + 
+                                       'Would you like to continue using the current data?')) {
+                                updateDropdown();
+                                updateSessionList();
+                                if (footer) footer.textContent = 'Using current memory data as emergency backup';
+                            }
+                        }
+                    }
+                    return result;
                 }
             } catch (e) {
                 console.error('Error in readRawParameters:', e);
                 if (footer) footer.textContent = 'Error reading parameters: ' + e.message;
+                
+                // Show emergency UI for manual data entry
+                const emergencyDiv = activateEmergencyMode();
+                
+                // Create a hardcoded test option for desperate scenarios
+                const injectTestButton = document.createElement('button');
+                injectTestButton.textContent = "Inject Test Data";
+                injectTestButton.className = "button";
+                injectTestButton.style.backgroundColor = "#4CAF50";
+                injectTestButton.style.marginTop = "10px";
+                injectTestButton.style.width = "100%";
+                
+                injectTestButton.addEventListener('click', function() {
+                    // Hard-coded test data as last resort
+                    const testData = {
+                        timeTracker: {
+                            sessions: [
+                                {
+                                    date: getToday(),
+                                    times: [2, 7, 3]
+                                }
+                            ]
+                        }
+                    };
+                    console.log('Injecting test data:', testData);
+                    window.receiveDirectData(testData);
+                });
+                
+                // Add to emergency div
+                if (emergencyDiv && emergencyDiv.parentNode) {
+                    emergencyDiv.appendChild(injectTestButton);
+                }
+                
                 return false;
             }
         };
@@ -1540,19 +1635,37 @@
         // Helper function to process raw parameters response
         function processRawParametersResponse(response) {
             try {
-                // Parse the response
-                const parsed = (typeof response === 'string') ? JSON.parse(response) : response;
-                console.log('Raw parameter data:', parsed);
+                // Parse the response if it's a string
+                let parsed;
+                if (typeof response === 'string') {
+                    try {
+                        parsed = JSON.parse(response);
+                        console.log('Raw parameter data parsed from string:', parsed);
+                    } catch (parseError) {
+                        console.error('Error parsing raw parameter response:', parseError, response.substring(0, 100));
+                        if (footer) footer.textContent = 'Error parsing parameter data';
+                        return false;
+                    }
+                } else {
+                    parsed = response;
+                    console.log('Raw parameter data (already an object):', parsed);
+                }
                 
-                if (!parsed || !parsed.rawParameters) {
-                    console.error('No raw parameters found');
-                    if (footer) footer.textContent = 'Error: No parameters found';
+                if (!parsed || !parsed.success) {
+                    console.error('Error in raw parameter response:', parsed ? parsed.message : 'No data');
+                    if (footer) footer.textContent = 'Error: ' + (parsed && parsed.message ? parsed.message : 'Invalid response');
+                    return false;
+                }
+                
+                if (!parsed.rawParameters || !Array.isArray(parsed.rawParameters) || parsed.rawParameters.length === 0) {
+                    console.warn('No raw parameters found or empty array');
+                    if (footer) footer.textContent = 'No time parameters found in document';
                     return false;
                 }
                 
                 // Extract time parameters
                 const timeParams = parsed.rawParameters.filter(p => 
-                    p.name.startsWith('Time') && !isNaN(parseFloat(p.name.substring(4)))
+                    p && p.name && p.name.startsWith('Time') && !isNaN(parseFloat(p.name.substring(4)))
                 );
                 
                 console.log(`Found ${timeParams.length} time parameters`);
@@ -1573,16 +1686,25 @@
                             date = param.comment.replace("Time entry on ", "").trim();
                         }
                         
-                        // Parse the value
+                        // Parse the value - handle multiple possible formats
                         let value = 0;
                         try {
-                            if (param.value) {
+                            if (param.value !== undefined && param.value !== null) {
                                 value = parseFloat(param.value);
                             } else if (param.rawExpression) {
-                                value = parseFloat(param.rawExpression);
+                                // Extract numerical value from expressions like "2.00 s"
+                                const match = param.rawExpression.match(/(\d+(\.\d+)?)/);
+                                if (match) {
+                                    value = parseFloat(match[1]);
+                                }
                             }
                         } catch (e) {
-                            console.error('Error parsing value:', e);
+                            console.error('Error parsing parameter value:', e);
+                        }
+                        
+                        if (isNaN(value)) {
+                            console.warn(`Invalid value for parameter ${param.name}: ${param.value || param.rawExpression}`);
+                            return; // Skip this parameter
                         }
                         
                         // Add to sessions by date
@@ -1590,9 +1712,8 @@
                             sessionsByDate[date] = [];
                         }
                         
-                        if (!isNaN(value) && value > 0) {
-                            sessionsByDate[date].push(value);
-                        }
+                        console.log(`Parameter ${param.name}: ${value}s on ${date}`);
+                        sessionsByDate[date].push(value);
                     } catch (e) {
                         console.error('Error processing parameter:', e);
                     }
@@ -1601,6 +1722,7 @@
                 // Convert to sessions array
                 const sessions = [];
                 for (const date in sessionsByDate) {
+                    console.log(`Adding session for date ${date} with ${sessionsByDate[date].length} time entries`);
                     sessions.push({
                         "date": date,
                         "times": sessionsByDate[date]
@@ -1620,13 +1742,16 @@
                     
                     if (footer) footer.textContent = `Emergency recovery: Loaded ${sessions.length} session(s)`;
                     return true;
+                } else {
+                    console.warn('No valid sessions could be constructed from parameters');
+                    if (footer) footer.textContent = 'No valid time data could be recovered';
+                    return false;
                 }
             } catch (e) {
-                console.error('Error parsing raw parameters:', e);
-                if (footer) footer.textContent = 'Error parsing parameters: ' + e.message;
+                console.error('Error processing raw parameters:', e);
+                if (footer) footer.textContent = 'Error processing parameters: ' + e.message;
+                return false;
             }
-            
-            return false;
         }
         
         // Add a recovery method that can be activated from the footer
@@ -1655,8 +1780,11 @@
                 <button id="emergencyBtn2" class="button" style="background-color: #ff5722; margin-bottom: 5px; width: 100%;">
                     Direct Parameter Access
                 </button>
-                <button id="emergencyBtn3" class="button" style="background-color: #f44336; width: 100%;">
+                <button id="emergencyBtn3" class="button" style="background-color: #f44336; margin-bottom: 5px; width: 100%;">
                     Reset All Data (Last Resort)
+                </button>
+                <button id="debugButton" class="button" style="background-color: #2196F3; width: 100%;">
+                    Debug API Response
                 </button>
             `;
             
@@ -1701,9 +1829,124 @@
                         if (footer) footer.textContent = 'Data reset to empty state';
                     }
                 });
+                
+                document.getElementById('debugButton').addEventListener('click', function() {
+                    testDirectDataResponse();
+                });
             }
             
             return emergencyDiv;
+        }
+        
+        // New test function to help debug API responses
+        function testDirectDataResponse() {
+            console.log('Testing direct API response...');
+            if (footer) footer.textContent = 'Testing API response, check console...';
+            
+            try {
+                // Create a debug div to display response
+                let debugDiv = document.getElementById('debugResponseDiv');
+                if (!debugDiv) {
+                    debugDiv = document.createElement('div');
+                    debugDiv.id = 'debugResponseDiv';
+                    debugDiv.style.backgroundColor = '#e3f2fd';
+                    debugDiv.style.padding = '10px';
+                    debugDiv.style.border = '1px solid #2196F3';
+                    debugDiv.style.borderRadius = '4px';
+                    debugDiv.style.marginTop = '10px';
+                    debugDiv.style.marginBottom = '10px';
+                    debugDiv.style.maxHeight = '200px';
+                    debugDiv.style.overflow = 'auto';
+                    debugDiv.style.fontFamily = 'monospace';
+                    debugDiv.style.fontSize = '12px';
+                    
+                    // Add to page after emergency div if it exists
+                    const emergencyDiv = document.querySelector('.container > div:last-child');
+                    if (emergencyDiv) {
+                        emergencyDiv.parentNode.insertBefore(debugDiv, emergencyDiv.nextSibling);
+                    } else {
+                        document.querySelector('.container').appendChild(debugDiv);
+                    }
+                }
+                
+                // Show loading
+                debugDiv.innerHTML = '<p>Testing API response...</p>';
+                
+                // First test the raw response from loadTimeData
+                const rawResponse = adskSendData('loadTimeData', '{}');
+                
+                // Display the result
+                let responseInfo = `<p><b>Raw API Response:</b></p>`;
+                responseInfo += `<p>Type: ${typeof rawResponse}</p>`;
+                
+                if (rawResponse) {
+                    if (typeof rawResponse === 'string') {
+                        responseInfo += `<p>Length: ${rawResponse.length}</p>`;
+                        responseInfo += `<p>First 200 chars: <pre>${escapeHtml(rawResponse.substring(0, 200))}</pre></p>`;
+                        
+                        try {
+                            const parsedData = JSON.parse(rawResponse);
+                            responseInfo += `<p>JSON Parse Result: Success</p>`;
+                            responseInfo += `<p>Keys: ${Object.keys(parsedData).join(', ')}</p>`;
+                            responseInfo += `<p>Has timeTracker: ${!!parsedData.timeTracker}</p>`;
+                            if (parsedData.timeTracker) {
+                                responseInfo += `<p>Session count: ${parsedData.timeTracker.sessions ? parsedData.timeTracker.sessions.length : 0}</p>`;
+                            }
+                        } catch (e) {
+                            responseInfo += `<p>JSON Parse Error: ${e.message}</p>`;
+                        }
+                    } else if (typeof rawResponse === 'object') {
+                        if (typeof rawResponse.then === 'function') {
+                            responseInfo += `<p>This is a Promise! Processing asynchronously...</p>`;
+                            
+                            // Process the Promise
+                            rawResponse.then(promiseResult => {
+                                let promiseInfo = `<p><b>Promise Resolution:</b></p>`;
+                                promiseInfo += `<p>Type: ${typeof promiseResult}</p>`;
+                                
+                                if (promiseResult) {
+                                    if (typeof promiseResult === 'string') {
+                                        promiseInfo += `<p>Length: ${promiseResult.length}</p>`;
+                                        promiseInfo += `<p>First 200 chars: <pre>${escapeHtml(promiseResult.substring(0, 200))}</pre></p>`;
+                                        
+                                        try {
+                                            const parsedPromiseData = JSON.parse(promiseResult);
+                                            promiseInfo += `<p>JSON Parse Result: Success</p>`;
+                                            promiseInfo += `<p>Keys: ${Object.keys(parsedPromiseData).join(', ')}</p>`;
+                                        } catch (e) {
+                                            promiseInfo += `<p>JSON Parse Error: ${e.message}</p>`;
+                                        }
+                                    } else if (typeof promiseResult === 'object') {
+                                        promiseInfo += `<p>Keys: ${Object.keys(promiseResult).join(', ')}</p>`;
+                                    }
+                                } else {
+                                    promiseInfo += `<p>Empty/null response</p>`;
+                                }
+                                
+                                debugDiv.innerHTML += promiseInfo;
+                            }).catch(err => {
+                                debugDiv.innerHTML += `<p><b>Promise Error:</b> ${err.message}</p>`;
+                            });
+                        } else {
+                            responseInfo += `<p>Keys: ${Object.keys(rawResponse).join(', ')}</p>`;
+                        }
+                    }
+                } else {
+                    responseInfo += `<p>Empty/null response</p>`;
+                }
+                
+                debugDiv.innerHTML = responseInfo;
+            } catch (error) {
+                console.error('Error testing API response:', error);
+                if (footer) footer.textContent = 'Error testing API: ' + error.message;
+            }
+        }
+        
+        // Helper function to escape HTML for display
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
         }
     </script>
 </body>
