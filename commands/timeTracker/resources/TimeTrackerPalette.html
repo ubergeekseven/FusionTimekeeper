@@ -82,13 +82,7 @@
         .session-list li {
             margin-bottom: 2px;
         }
-        .project-input {
-            width: 100%;
-            padding: 6px;
-            border-radius: 4px;
-            border: 1px solid #ccc;
-            margin-bottom: 8px;
-        }
+
         .overall-total {
             margin-top: 8px;
             font-weight: bold;
@@ -116,7 +110,6 @@
 <body>
     <div class="container">
         <h2>Fusion Timekeeper</h2>
-        <input class="project-input" id="projectName" placeholder="Project Name (optional)" />
         <div class="time-display" id="timeDisplay">00:00:00</div>
         <div class="button-row">
             <button class="button" id="startBtn">Start</button>
@@ -130,67 +123,585 @@
             <div class="overall-total" id="overallTotal"></div>
         </div>
         <div class="button-row" style="margin-top:10px;">
-            <button class="button" id="saveBtn">Save</button>
-            <button class="button" id="importBtn">Import JSON</button>
-            <input type="file" id="importFile" style="display:none;" accept="application/json" />
+            <button class="button" id="saveBtn" style="background-color: #1976D2;">Save to Document</button>
+            <button class="button" id="refreshBtn" style="background-color: #4CAF50;">Refresh Data</button>
+            <button class="button" id="testBtn" style="background-color: #ff9800; display: none;">Simple Test</button>
         </div>
         <div class="last-saved" id="lastSaved"></div>
         <div class="export-row">
             <button class="button" id="csvBtn">Export CSV</button>
             <button class="button" id="mdBtn">Export Markdown</button>
         </div>
-        <div class="footer">Session time is stored in memory. Save to avoid losing your work.</div>
+        <div class="footer" id="footer">Time tracking data is stored with your Fusion 360 document using parameters.</div>
+        
+        <!-- Add a hidden input to help with debugging -->
+        <input type="hidden" id="debugDataReceiver" value="">
     </div>
     <script>
-        // --- Data Model ---
-        let fullJson = {};
-        let data = {
-            projectName: '',
-            sessions: [] // {date: 'YYYY-MM-DD', times: [seconds, ...]}
+        // Global error handling to catch any JS errors
+        window.onerror = function(message, source, lineno, colno, error) {
+            console.error("GLOBAL ERROR:", message, "at", source, lineno, colno);
+            console.error(error);
+            
+            // Update UI to show error
+            try {
+                const footer = document.getElementById('footer');
+                if (footer) {
+                    footer.textContent = `Error: ${message} (line ${lineno})`;
+                    footer.style.color = 'red';
+                }
+            } catch (e) {
+                // Ignore errors updating UI
+            }
+            
+            return true; // Prevent default error handling
         };
+    
+        // --- Data Model (shared across scope) ---
+        let fullJson = { timeTracker: { sessions: [] } };
+        let data = { sessions: [] };
         let startTime = null;
         let elapsed = 0;
         let timerInterval = null;
-        let currentDate = getToday();
-        let fileHandle = null; // For File System Access API
-        let autoSaveInterval = null;
+        let currentDate = null; // Will be set in init()
         let lastSavedTime = null;
+        let projectInfo = null;
+        let autoSaveInterval = null;
+        let dataLoadAttempts = 0;
+        const MAX_LOAD_ATTEMPTS = 5;
 
         // --- DOM Elements ---
-        const timeDisplay = document.getElementById('timeDisplay');
-        const startBtn = document.getElementById('startBtn');
-        const stopBtn = document.getElementById('stopBtn');
-        const resetBtn = document.getElementById('resetBtn');
-        const dateDropdown = document.getElementById('dateDropdown');
-        const sessionList = document.getElementById('sessionList');
-        const projectNameInput = document.getElementById('projectName');
-        const saveBtn = document.getElementById('saveBtn');
-        const importBtn = document.getElementById('importBtn');
-        const importFile = document.getElementById('importFile');
-        const overallTotal = document.getElementById('overallTotal');
-        const lastSaved = document.getElementById('lastSaved');
-        const csvBtn = document.getElementById('csvBtn');
-        const mdBtn = document.getElementById('mdBtn');
+        // Will be initialized properly when document is ready
+        let timeDisplay, startBtn, stopBtn, resetBtn, dateDropdown, 
+            sessionList, saveBtn, overallTotal, 
+            lastSaved, csvBtn, mdBtn, refreshBtn, testBtn, 
+            debugDataReceiver, footer;
+        
+        // Initialize DOM elements after page load
+        function initializeDomElements() {
+            console.log('Initializing DOM elements');
+            timeDisplay = document.getElementById('timeDisplay');
+            startBtn = document.getElementById('startBtn');
+            stopBtn = document.getElementById('stopBtn');
+            resetBtn = document.getElementById('resetBtn');
+            dateDropdown = document.getElementById('dateDropdown');
+            sessionList = document.getElementById('sessionList');
+            // projectNameInput = document.getElementById('projectName');
+            saveBtn = document.getElementById('saveBtn');
+            overallTotal = document.getElementById('overallTotal');
+            lastSaved = document.getElementById('lastSaved');
+            csvBtn = document.getElementById('csvBtn');
+            mdBtn = document.getElementById('mdBtn');
+            refreshBtn = document.getElementById('refreshBtn');
+            testBtn = document.getElementById('testBtn');
+            debugDataReceiver = document.getElementById('debugDataReceiver');
+            footer = document.getElementById('footer');
+            
+            // Check that critical elements exist
+            if (!dateDropdown) console.error("ERROR: dateDropdown not found!");
+            if (!sessionList) console.error("ERROR: sessionList not found!");
+            if (!footer) console.error("ERROR: footer not found!");
+            
+            // Make sure currentDate is initialized
+            currentDate = getToday();
+            
+            console.log('DOM elements initialized');
+        }
+        
+        // Function to attach all event listeners - called after DOM is initialized
+        function attachEventListeners() {
+            console.log('Attaching event listeners');
+            
+            // Button event listeners
+            if (startBtn) {
+                startBtn.addEventListener('click', () => {
+                    if (!startTime) {
+                        startTime = Date.now();
+                        timerInterval = setInterval(updateDisplay, 1000);
+                        startBtn.disabled = true;
+                        stopBtn.disabled = false;
+                        resetBtn.disabled = false;
+                        
+                        // Log the start of timing
+                        console.log('Timer started');
+                    }
+                });
+            }
+            
+            if (stopBtn) {
+                stopBtn.addEventListener('click', () => {
+                    if (startTime) {
+                        // Calculate the elapsed time for this session
+                        const seconds = Math.floor((Date.now() - startTime) / 1000) + elapsed;
+                        console.log(`Timer stopped after ${seconds} seconds`);
+                        
+                        // Save the session - new function call to avoid duplication
+                        saveSession(seconds);
+                        
+                        // Reset the timer UI
+                        resetTimerUI();
+                        
+                        // Show confirmation in footer
+                        const footer = document.querySelector('.footer');
+                        footer.textContent = `Session of ${formatTime(seconds)} saved successfully`;
+                        setTimeout(() => {
+                            footer.textContent = 'Time tracking data is stored with your Fusion 360 document using parameters';
+                        }, 3000);
+                    }
+                });
+            }
+            
+            if (resetBtn) resetBtn.addEventListener('click', resetTimerUI);
+            
+            if (dateDropdown) {
+                dateDropdown.addEventListener('change', (e) => {
+                    currentDate = e.target.value;
+                    updateSessionList();
+                });
+            }
+            
+            if (saveBtn) {
+                saveBtn.addEventListener('click', () => {
+                    // Save the current state including any running timer
+                    const footer = document.querySelector('.footer');
+                    footer.textContent = 'Saving data to document...';
+                    
+                    console.log('Manual save requested by user');
+                    saveToParameters();
+                });
+            }
+            
+            if (csvBtn) csvBtn.addEventListener('click', exportCSV);
+            if (mdBtn) mdBtn.addEventListener('click', exportMarkdown);
+            
+            if (refreshBtn) {
+                refreshBtn.addEventListener('click', function() {
+                    console.log('Refresh button clicked - loading time data');
+                    footer.textContent = 'Loading data from document...';
+                    
+                    // Try standard method first
+                    const success = loadTimeData();
+                    
+                    // If it fails, try emergency method after a short delay
+                    if (!success) {
+                        setTimeout(() => {
+                            if (!data.sessions || data.sessions.length === 0) {
+                                console.log('Standard refresh failed, trying emergency method');
+                                footer.textContent = 'Standard refresh failed, trying emergency recovery...';
+                                window.readRawParameters();
+                            }
+                        }, 1000);
+                    }
+                });
+            }
+            
+            // Footer double-click for test mode
+            if (footer) {
+                footer.addEventListener('dblclick', function() {
+                    if (testBtn) {
+                        testBtn.style.display = 'block';
+                        this.textContent = 'Test mode activated - use the Simple Test button for parameter debugging';
+                    }
+                });
+            }
+            
+            // Test button event listener
+            if (testBtn) {
+                testBtn.addEventListener('click', function() {
+                    console.log('Running simple parameter test');
+                    document.querySelector('.footer').textContent = 'Running parameter test...';
+                    
+                    // Random test ID to track this specific test in logs
+                    const testId = Math.floor(Math.random() * 10000);
+                    
+                    try {
+                        const testData = {
+                            testId: testId,
+                            value: 'Test value ' + new Date().toISOString(),
+                            command: 'createParameter'
+                        };
+                        
+                        console.log(`[${testId}] Sending simple test request:`, testData);
+                        const response = adskSendData('simpleTest', JSON.stringify(testData));
+                        
+                        console.log(`[${testId}] Test response received:`, response);
+                        document.querySelector('.footer').textContent = `Test complete! Test ID: ${testId}`;
+                        
+                        // Also try to read the parameters
+                        setTimeout(function() {
+                            console.log(`[${testId}] Reading parameters to verify test`);
+                            const readResponse = adskSendData('readParameters', JSON.stringify({ testId: testId }));
+                            console.log(`[${testId}] Read response received:`, readResponse);
+                            
+                            // Show the result briefly
+                            const footer = document.querySelector('.footer');
+                            try {
+                                const result = JSON.parse(readResponse);
+                                footer.textContent = `Read result: ${result.message || 'Unknown'}`;
+                            } catch (e) {
+                                footer.textContent = `Read result: Error parsing response`;
+                            }
+                            
+                            // Then restore after a delay
+                            setTimeout(() => {
+                                footer.textContent = 'Time tracking data is stored with your Fusion 360 document using parameters';
+                            }, 5000);
+                        }, 1000);
+                    } catch (e) {
+                        console.error(`[${testId}] Test error:`, e);
+                        document.querySelector('.footer').textContent = `Test error: ${e.message}`;
+                    }
+                });
+            }
+            
+            // Debug data receiver listener
+            if (debugDataReceiver) {
+                debugDataReceiver.addEventListener('change', function() {
+                    if (this.value) {
+                        console.log("Debug data receiver changed:", this.value.substring(0, 50) + "...");
+                        window.receiveDirectData(this.value);
+                        this.value = ''; // Clear after use
+                    }
+                });
+            }
+            
+            console.log('All event listeners attached');
+        }
+        
+        // Call this when document is loaded
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('DOM content loaded - initializing application');
+            initializeDomElements();
+            attachEventListeners();
+            init();
+        });
 
+        // --- Communication with Fusion 360 ---
+        window.fusionJavaScriptHandler = {
+            handle: function(action, data) {
+                try {
+                    // Print full action and data information for debugging
+                    console.log(`==== EVENT RECEIVED ====`);
+                    console.log(`Action: ${action}`);
+                    console.log(`Data type: ${typeof data}`);
+                    console.log(`Data length: ${data ? data.length : 0}`);
+                    if (data && typeof data === 'string' && data.length > 0) {
+                        console.log(`First 100 chars: ${data.substring(0, 100)}`);
+                    }
+                    
+                    if (!data) {
+                        console.warn(`Empty data received for action: ${action}`);
+                        return 'OK';
+                    }
+                    
+                    // Make sure we can parse the data
+                    let response;
+                    try {
+                        response = JSON.parse(data);
+                        console.log('Parsed response structure:', Object.keys(response));
+                    } catch (parseError) {
+                        console.error('Error parsing response:', parseError);
+                        console.error('Raw data:', data.substring(0, 100) + (data.length > 100 ? '...' : ''));
+                        return 'OK';
+                    }
+                    
+                    // CRITICAL FIX: Directly handle loadTimeData response
+                    if (action === 'loadTimeData') {
+                        console.log('DIRECT HANDLING: loadTimeData response received');
+                        
+                        if (response && response.timeTracker && response.timeTracker.sessions) {
+                            console.log('Valid data found in loadTimeData response');
+                            console.log('Response structure:', JSON.stringify(response));
+                            
+                            // Update global data variables
+                            data = response.timeTracker;
+                            fullJson = response;
+                            console.log('Global data updated with', data.sessions.length, 'sessions');
+                            console.log('Session data:', JSON.stringify(data.sessions));
+                            
+                            // Update current date
+                            if (data.sessions && data.sessions.length > 0) {
+                                currentDate = data.sessions[data.sessions.length - 1].date;
+                                console.log('Current date set to', currentDate);
+                            } else {
+                                currentDate = getToday();
+                            }
+                            
+                            // Update UI
+                            try {
+                                console.log('About to update dropdown with', data.sessions.length, 'sessions');
+                                updateDropdown();
+                                console.log('Dropdown updated successfully, updating session list');
+                                updateSessionList();
+                                console.log('Session list updated successfully');
+                                
+                                lastSavedTime = new Date();
+                                updateLastSaved();
+                                
+                                footer.textContent = `✅ Loaded ${data.sessions.length} session(s) with ${data.sessions[0]?.times.length || 0} time entries`;
+                                
+                                console.log('UI updated successfully via direct handler');
+                                
+                                // Log generated HTML for debugging
+                                console.log('Dropdown HTML:', dateDropdown.innerHTML);
+                                console.log('Session list HTML:', sessionList.innerHTML);
+                            } catch (uiError) {
+                                console.error('Error updating UI:', uiError);
+                                console.error('Error stack:', uiError.stack);
+                                footer.textContent = 'Error updating UI: ' + uiError.message;
+                            }
+                        } else {
+                            console.warn('Invalid or empty data in loadTimeData response');
+                            footer.textContent = 'No valid time data in response';
+                        }
+                        
+                        // No need to continue with other switch cases for loadTimeData
+                        return 'OK';
+                    }
+                    
+                    switch(action) {
+                        case 'timeDataLoaded':
+                            handleTimeDataLoaded(response);
+                            break;
+                        case 'timeDataSaved':
+                            handleTimeDataSaved(response);
+                            break;
+                        case 'projectInfo':
+                            handleProjectInfo(response);
+                            break;
+                        case 'parameterTestResult':
+                            handleParameterTestResult(response);
+                            break;
+                    }
+                } catch (e) {
+                    console.error('Error in handle:', e);
+                }
+                return 'OK';
+            }
+        };
+        
+        function adskSendData(action, data) {
+            console.log('Attempting to send data to Fusion:', action, data);
+            
+            if (window.adsk && window.adsk.fusionSendData) {
+                try {
+                    // Make sure data is properly formatted as a string
+                    let dataToSend = data;
+                    if (typeof data !== 'string') {
+                        dataToSend = JSON.stringify(data);
+                    }
+                    
+                    // Log what we're actually sending
+                    console.log(`Sending to Fusion: action='${action}', data length=${dataToSend.length}`);
+                    if (dataToSend.length < 500) {
+                        console.log(`Data content: ${dataToSend}`);
+                    }
+                    
+                    // According to docs, first parameter is the action name, second is the data
+                    let response = window.adsk.fusionSendData(action, dataToSend);
+                    
+                    // Enhanced error checking for response
+                    if (response === null || response === undefined) {
+                        console.warn('Warning: fusionSendData returned null or undefined');
+                        // Return a formatted error message
+                        return JSON.stringify({
+                            success: false,
+                            message: 'Fusion API returned null or undefined response'
+                        });
+                    }
+                    
+                    // Handle Promise responses - Fusion API should not return Promises but check anyway
+                    if (response !== null && typeof response === 'object' && typeof response.then === 'function') {
+                        console.warn('Warning: fusionSendData returned a Promise - this might cause issues');
+                        // We can't return a Promise since our code expects a synchronous response
+                        // Just return a formatted message as a fallback
+                        return JSON.stringify({
+                            success: false,
+                            message: 'API returned a Promise which cannot be handled synchronously'
+                        });
+                    }
+                    
+                    // Log the response
+                    if (response) {
+                        console.log(`Response received, length: ${response.length}`);
+                        if (response.length < 100) {
+                            console.log(`Response content: ${response}`);
+                        } else {
+                            console.log(`Response content (first 100 chars): ${response.substring(0, 100)}...`);
+                        }
+                    } else {
+                        console.log('No response or empty response received');
+                    }
+                    
+                    return response;
+                } catch(e) {
+                    console.error('Error sending data to Fusion:', e);
+                    return JSON.stringify({
+                        success: false,
+                        message: `Error sending data: ${e.message}`
+                    });
+                }
+            } else {
+                console.warn('Fusion API not available');
+                return JSON.stringify({
+                    success: false,
+                    message: 'Fusion API not available'
+                });
+            }
+        }
+        
+        function loadTimeData() {
+            console.log('loadTimeData function called');
+            footer.textContent = 'Loading data from document...';
+            
+            try {
+                // Send the request to load time data from parameters
+                console.log('Sending loadTimeData request to Fusion');
+                const response = adskSendData('loadTimeData', '{}');
+                console.log('loadTimeData response received:', typeof response);
+                
+                // Log some info about what's happening
+                footer.textContent = 'Response received, processing...';
+                
+                if (!response) {
+                    console.error('ERROR: Empty response received from loadTimeData');
+                    footer.textContent = 'Error: No response from Fusion 360';
+                    return false;
+                }
+                
+                console.log('RESPONSE DEBUG:', response.substring && response.substring(0, 100));
+                
+                // Response processing now happens in the fusionJavaScriptHandler.handle
+                // This function just needs to send the request
+                console.log('Request sent successfully - UI will update via handler');
+                return true;
+            } catch (e) {
+                console.error('Error in loadTimeData:', e);
+                footer.textContent = 'Error: ' + e.message;
+                return false;
+            }
+        }
+        
+        function handleTimeDataLoaded(response) {
+            console.log('Time data loaded response received:', response);
+            
+            if (response && response.timeTracker) {
+                console.log('Valid time data found in response');
+                data = response.timeTracker;
+                fullJson = response;
+                
+                // Set current date to the most recent session date or today
+                currentDate = data.sessions && data.sessions.length ? 
+                    data.sessions[data.sessions.length-1].date : getToday();
+                
+                console.log('Setting current date to:', currentDate);
+                console.log('Updating UI with loaded data...');
+                
+                // Update the UI
+                updateDropdown();
+                updateSessionList();
+                
+                // Update last saved time
+                lastSavedTime = new Date();
+                updateLastSaved();
+                
+                console.log('Time data loaded and UI updated successfully');
+                
+                // Update UI to show where data is loaded from
+                const footer = document.querySelector('.footer');
+                footer.textContent = 'Data loaded successfully from document parameters';
+                setTimeout(() => {
+                    footer.textContent = 'Session data is stored with your Fusion 360 document using parameters.';
+                }, 3000);
+            } else {
+                console.warn('No valid time data found in response:', response);
+                // If no data found in parameters, use empty data
+                data = {
+                    sessions: []
+                };
+                fullJson = { timeTracker: data };
+                updateDropdown();
+                updateSessionList();
+                
+                // Show no data message
+                const footer = document.querySelector('.footer');
+                footer.textContent = 'No saved time data found in document';
+                setTimeout(() => {
+                    footer.textContent = 'Session data is stored with your Fusion 360 document using parameters.';
+                }, 3000);
+            }
+        }
+        
+        function handleTimeDataSaved(response) {
+            if (response && response.success) {
+                lastSavedTime = new Date();
+                updateLastSaved();
+                console.log('Time data saved to parameters');
+                
+                // Update UI to indicate successful parameter save
+                const footer = document.querySelector('.footer');
+                footer.textContent = 'Data successfully saved to document parameters.';
+                setTimeout(() => {
+                    footer.textContent = 'Session data is stored with your Fusion 360 document using parameters.';
+                }, 3000);
+            } else {
+                console.error('Failed to save time data to parameters');
+                // Update UI to indicate save failure
+                const footer = document.querySelector('.footer');
+                footer.textContent = 'Failed to save to parameters. Try saving manually again.';
+            }
+        }
+        
+        function handleProjectInfo(response) {
+            projectInfo = response;
+            console.log('Project info:', projectInfo);
+        }
+        
+        function handleParameterTestResult(response) {
+            console.log('Received parameter test result:', response);
+            
+            if (response && response.success) {
+                // Include test ID if available
+                const testIdInfo = response.testId ? ` (ID: ${response.testId})` : '';
+                console.log(`Test ${response.testId || ''} succeeded: ${response.message}`);
+            } else {
+                const testIdInfo = response.testId ? ` (ID: ${response.testId})` : '';
+                console.error(`Test ${response.testId || ''} failed: ${response.message}`);
+            }
+        }
+        
         // --- Utility Functions ---
         function getToday() {
             const d = new Date();
             return d.toISOString().slice(0, 10);
         }
+        
         function formatTime(sec) {
             const hours = Math.floor(sec / 3600);
             const minutes = Math.floor((sec % 3600) / 60);
-            const seconds = sec % 60;
+            const seconds = Math.floor(sec % 60);
             return `${hours.toString().padStart(2, '0')}` +
                 `:${minutes.toString().padStart(2, '0')}` +
                 `:${seconds.toString().padStart(2, '0')}`;
         }
+        
         function getOverallTotal(sessionsOverride) {
             let sessions = sessionsOverride || data.sessions;
-            return sessions.reduce((sum, session) => {
-                return sum + session.times.reduce((s, t) => s + t, 0);
-            }, 0);
+            let total = 0;
+            
+            sessions.forEach(session => {
+                if (Array.isArray(session.times)) {
+                    // Format with array of times
+                    session.times.forEach(t => total += t);
+                } else if (session.duration !== undefined) {
+                    // Format with duration property
+                    total += session.duration || 0;
+                }
+            });
+            
+            return total;
         }
+        
         function updateDisplay() {
             let total = elapsed;
             if (startTime) {
@@ -198,37 +709,151 @@
             }
             timeDisplay.textContent = formatTime(total);
         }
+        
         function updateDropdown() {
-            // Populate dropdown with all dates
+            console.log('updateDropdown called');
+            
+            // Make sure data and sessions exist
+            if (!data) {
+                console.error('ERROR: data variable is null/undefined in updateDropdown');
+                data = { sessions: [] };
+            }
+            
+            if (!data.sessions) {
+                console.error('ERROR: data.sessions is missing in updateDropdown');
+                data.sessions = [];
+            }
+            
+            console.log(`updateDropdown with ${data.sessions.length} sessions`);
+            
+            // Clear existing options
             dateDropdown.innerHTML = '';
+            
+            // If no sessions exist, add today as an option
+            if (data.sessions.length === 0) {
+                console.log('No sessions found, adding today as option');
+                const today = getToday();
+                const opt = document.createElement('option');
+                opt.value = today;
+                opt.textContent = today;
+                opt.selected = true;
+                dateDropdown.appendChild(opt);
+                currentDate = today;
+                return;
+            }
+            
+            // Populate dropdown with all dates
             data.sessions.forEach((s, idx) => {
+                if (!s || !s.date) {
+                    console.error(`Invalid session at index ${idx}:`, s);
+                    return;
+                }
+                
                 const opt = document.createElement('option');
                 opt.value = s.date;
                 opt.textContent = s.date;
                 if (s.date === currentDate) opt.selected = true;
                 dateDropdown.appendChild(opt);
+                console.log(`Added date option: ${s.date}`);
             });
+            
+            // If currentDate is not in the list, select the last one
+            if (dateDropdown.selectedIndex < 0 && data.sessions.length > 0) {
+                console.log('Current date not found in options, selecting last date');
+                dateDropdown.options[dateDropdown.options.length-1].selected = true;
+                currentDate = dateDropdown.options[dateDropdown.options.length-1].value;
+            }
+            
+            console.log(`updateDropdown complete, selected date: ${currentDate}`);
         }
+        
         function updateSessionList() {
-            // Show all times for selected date
-            const session = data.sessions.find(s => s.date === currentDate);
-            if (!session) {
-                sessionList.innerHTML = '<i>No sessions for this date.</i>';
-            } else {
+            console.log('updateSessionList called');
+            
+            // Make sure data and sessions exist
+            if (!data) {
+                console.error('ERROR: data variable is null/undefined in updateSessionList');
+                data = { sessions: [] };
+            }
+            
+            if (!data.sessions) {
+                console.error('ERROR: data.sessions is missing in updateSessionList');
+                data.sessions = [];
+            }
+            
+            console.log(`updateSessionList for date ${currentDate} with ${data.sessions.length} total sessions`);
+            
+            try {
+                // Find the session for the selected date
+                const session = data.sessions.find(s => s.date === currentDate);
+                if (!session) {
+                    sessionList.innerHTML = '<i>No sessions for this date.</i>';
+                    console.log('No sessions found for date:', currentDate);
+                    
+                    // Show overall total anyway
+                    try {
+                        let overall = getOverallTotal();
+                        overallTotal.innerHTML = `Overall Total: ${formatTime(overall)}`;
+                    } catch (overallError) {
+                        console.error('Error calculating overall total:', overallError);
+                        overallTotal.innerHTML = 'Error calculating total';
+                    }
+                    return;
+                }
+                
+                console.log('Found session for date:', currentDate, session);
+                
                 let html = '<ul>';
                 let total = 0;
-                session.times.forEach((t, i) => {
-                    html += `<li>Session ${i+1}: ${formatTime(t)}</li>`;
-                    total += t;
-                });
-                html += '</ul>';
-                html += `<b>Total: ${formatTime(total)}</b>`;
-                sessionList.innerHTML = html;
+                
+                try {
+                    // Handle both session formats: arrays of times or single session objects
+                    if (Array.isArray(session.times)) {
+                        // This is the {date, times: []} format from sequential parameters
+                        console.log('Processing times array format', session.times);
+                        session.times.forEach((t, i) => {
+                            html += `<li>Session ${i+1}: ${formatTime(t)}</li>`;
+                            total += t;
+                        });
+                    } else if (session.duration !== undefined) {
+                        // This is the full session object format
+                        console.log('Processing duration format', session.duration);
+                        html += `<li>Session ${session.id || 1}: ${formatTime(session.duration || 0)}</li>`;
+                        total += session.duration || 0;
+                        
+                        // If this is the only session, add project info if available
+                        if (session.project_path) {
+                            html += `<li><small>Project: ${session.project_path}</small></li>`;
+                        }
+                    } else {
+                        console.error('Unknown session format:', session);
+                        html += '<li>Error: Unknown session format</li>';
+                    }
+                    
+                    html += '</ul>';
+                    html += `<b>Daily Total: ${formatTime(total)}</b>`;
+                    sessionList.innerHTML = html;
+                    console.log('Session list updated with total:', total);
+                } catch (sessionError) {
+                    console.error('Error processing session:', sessionError);
+                    sessionList.innerHTML = '<i>Error processing session data</i>';
+                }
+                
+                // Calculate and show overall total
+                try {
+                    let overall = getOverallTotal();
+                    overallTotal.innerHTML = `Overall Total: ${formatTime(overall)}`;
+                    console.log('Overall total updated:', overall);
+                } catch (overallError) {
+                    console.error('Error calculating overall total:', overallError);
+                    overallTotal.innerHTML = 'Error calculating total';
+                }
+            } catch (e) {
+                console.error('Error in updateSessionList:', e);
+                sessionList.innerHTML = '<i>Error updating session list</i>';
             }
-            // Show overall total
-            let overall = getOverallTotal();
-            overallTotal.innerHTML = `Overall Total: ${formatTime(overall)}`;
         }
+        
         function updateLastSaved() {
             if (lastSavedTime) {
                 lastSaved.textContent = `Last saved at: ${lastSavedTime.toLocaleTimeString()}`;
@@ -236,18 +861,147 @@
                 lastSaved.textContent = '';
             }
         }
+        
         function saveSession(seconds) {
+            console.log(`Saving session with ${seconds} seconds`);
+            
+            // Before saving, ensure we have the latest data from parameters
+            try {
+                console.log('Loading current parameter data before adding new session...');
+                // Get existing data from parameters first
+                const currentData = loadCurrentParameterData();
+                
+                // If we got data, use it instead of our current in-memory data
+                if (currentData && currentData.timeTracker && currentData.timeTracker.sessions) {
+                    console.log('Found existing parameter data, merging with new session');
+                    data = currentData.timeTracker;
+                    fullJson = currentData;
+                } else {
+                    console.log('No existing parameter data found, using current memory data');
+                }
+            } catch (e) {
+                console.error('Error loading current parameter data:', e);
+                // Continue with current in-memory data
+            }
+            
+            // Ensure we have a valid session for the current date
             let session = data.sessions.find(s => s.date === currentDate);
             if (!session) {
                 session = {date: currentDate, times: []};
                 data.sessions.push(session);
                 data.sessions.sort((a, b) => a.date.localeCompare(b.date));
             }
+            
+            // Add the new time entry
+            console.log(`Adding time entry of ${seconds} seconds to date ${currentDate}`);
             session.times.push(seconds);
+            
+            // Update UI
             updateDropdown();
             updateSessionList();
-            autoSave();
+            
+            // Save to parameters
+            saveToParameters();
         }
+        
+        function loadCurrentParameterData() {
+            console.log('Attempting to directly load current parameter data');
+            try {
+                const response = adskSendData('loadTimeData', '{}');
+                
+                if (response) {
+                    if (typeof response === 'string') {
+                        return JSON.parse(response);
+                    } else {
+                        return response;
+                    }
+                }
+            } catch (e) {
+                console.error('Error directly loading parameter data:', e);
+            }
+            return null;
+        }
+        
+        function saveToParameters() {
+            try {
+                // Disable save button to prevent multiple saves
+                saveBtn.disabled = true;
+                
+                // Log the current data structure before saving
+                console.log('Current data structure:', JSON.stringify(data));
+                
+                // Prepare time data - don't include current running timer to avoid duplicates
+                fullJson = { timeTracker: { sessions: data.sessions } };
+                
+                // Use Promise-aware function to save to parameters
+                const requestId = Math.floor(Math.random() * 10000);
+                console.log(`[${requestId}] Saving data to parameters:`, fullJson);
+                
+                // Update UI to show saving progress
+                const footer = document.querySelector('.footer');
+                footer.textContent = 'Saving data to document...';
+                
+                // Function to process response
+                function processResponse(response) {
+                    if (!response) {
+                        console.error(`[${requestId}] No save response received`);
+                        footer.textContent = 'Error: No response from Fusion 360';
+                        saveBtn.disabled = false;
+                        return;
+                    }
+                    
+                    try {
+                        const result = typeof response === 'string' ? JSON.parse(response) : response;
+                        console.log(`[${requestId}] Save result:`, result);
+                        
+                        if (result.success) {
+                            lastSavedTime = new Date();
+                            updateLastSaved();
+                            
+                            // Update UI to indicate successful save
+                            footer.textContent = 'Data saved successfully to document parameters';
+                            setTimeout(() => {
+                                footer.textContent = 'Time tracking data is stored with your Fusion 360 document using parameters';
+                            }, 3000);
+                        } else {
+                            console.error(`[${requestId}] Save error:`, result.message || 'Unknown error');
+                            footer.textContent = `Save error: ${result.message || 'Unknown error'}`;
+                        }
+                        saveBtn.disabled = false;
+                    } catch (e) {
+                        console.error(`[${requestId}] Error processing save response:`, e);
+                        footer.textContent = `Save error: ${e.message}`;
+                        saveBtn.disabled = false;
+                    }
+                }
+                
+                const response = adskSendData('saveTimeData', JSON.stringify({ 
+                    data: fullJson 
+                }));
+                
+                if (response !== null && typeof response === 'object' && typeof response.then === 'function') {
+                    // It's a Promise
+                    console.log(`[${requestId}] saveTimeData returned Promise, waiting...`);
+                    response.then(actualResponse => {
+                        console.log(`[${requestId}] Promise resolved with response`);
+                        processResponse(actualResponse);
+                    }).catch(err => {
+                        console.error(`[${requestId}] Promise rejected:`, err);
+                        footer.textContent = `Save error: ${err.message || 'Promise error'}`;
+                        saveBtn.disabled = false;
+                    });
+                } else {
+                    // Direct response
+                    processResponse(response);
+                }
+            } catch (err) {
+                console.error('Failed to save to parameters:', err);
+                const footer = document.querySelector('.footer');
+                footer.textContent = 'Failed to save: ' + err.message;
+                saveBtn.disabled = false;
+            }
+        }
+        
         function resetTimerUI() {
             elapsed = 0;
             startTime = null;
@@ -257,128 +1011,50 @@
             stopBtn.disabled = true;
             resetBtn.disabled = true;
         }
+        
         // --- File Save/Load Functions ---
         function getSessionsWithCurrent() {
-            // Clone sessions and add current running timer if any
+            // Clone sessions first without modifying it
             let sessionsCopy = JSON.parse(JSON.stringify(data.sessions));
+            
+            // Only add current timer if it's actually running
             if (startTime) {
                 let runningSeconds = Math.floor((Date.now() - startTime) / 1000) + elapsed;
+                
+                // Find the session for current date
                 let session = sessionsCopy.find(s => s.date === currentDate);
                 if (!session) {
                     session = {date: currentDate, times: []};
                     sessionsCopy.push(session);
                     sessionsCopy.sort((a, b) => a.date.localeCompare(b.date));
                 }
+                
+                // Add the running timer as a temporary entry
+                // DO NOT modify any existing entries
                 session.times = [...session.times, runningSeconds];
             }
+            
             return sessionsCopy;
         }
-        function setSharedData() {
-            // Only share the timeTracker data now that notes are in a separate file
-            window.fusionTimekeeperData = { 
-                timeTracker: data,
-                // Keep any existing notes if present
-                notes: window.fusionTimekeeperData && window.fusionTimekeeperData.notes ? 
-                       window.fusionTimekeeperData.notes : ''
-            };
-            window.fusionTimekeeperFileHandle = fileHandle;
+        
+        function autoSave() {
+            console.log('Auto-saving data...');
+            saveToParameters();
             
-            console.log('Shared data updated:', window.fusionTimekeeperData);
+            // Update footer temporarily
+            const footer = document.querySelector('.footer');
+            const originalText = footer.textContent;
+            footer.textContent = 'Auto-saving to parameters...';
+            setTimeout(() => {
+                footer.textContent = originalText;
+            }, 2000);
         }
-        async function saveToFile() {
-            updateLastSaved();
-            try {
-                // Always include current running timer in save
-                let sessionsToSave = getSessionsWithCurrent();
-                
-                // Now we only save timeTracker data in this file
-                fullJson = { timeTracker: { ...data, sessions: sessionsToSave } };
-                const exportData = JSON.stringify(fullJson, null, 2);
-                let filename = (data.projectName ? data.projectName : 'FusionTimekeeper') + '.json';
-                
-                console.log('Saving timekeeper file with data:', fullJson);
-                
-                if ('showSaveFilePicker' in window) {
-                    try {
-                        // If we don't have a file handle or can't use it, get a new one
-                        if (!fileHandle || !('createWritable' in fileHandle)) {
-                            console.log('No file handle, requesting one');
-                            fileHandle = await window.showSaveFilePicker({
-                                suggestedName: filename,
-                                types: [{
-                                    description: 'JSON Files',
-                                    accept: {'application/json': ['.json']}
-                                }]
-                            });
-                            console.log('Got file handle:', fileHandle.name);
-                        }
-                        
-                        console.log('Writing to file using handle');
-                        const writable = await fileHandle.createWritable();
-                        await writable.write(exportData);
-                        await writable.close();
-                        lastSavedTime = new Date();
-                        updateLastSaved();
-                        setSharedData();
-                        console.log('File saved successfully');
-                        return;
-                    } catch (err) {
-                        // If user cancels or permission denied, fallback to download
-                        console.error('Save error:', err);
-                        // Fall through to download method
-                    }
-                }
-                
-                // Fallback: download
-                console.log('Using fallback download method');
-                const blob = new Blob([exportData], {type: 'application/json'});
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = filename;
-                document.body.appendChild(a);
-                a.click();
-                setTimeout(() => {
-                    document.body.removeChild(a);
-                    URL.revokeObjectURL(url);
-                }, 100);
-                lastSavedTime = new Date();
-                updateLastSaved();
-                setSharedData();
-            } catch (err) {
-                console.error('Failed to save:', err);
-                alert('Failed to save: ' + err);
-            }
-        }
-        async function autoSave() {
-            // Auto-save every 5 minutes if fileHandle is set
-            if (fileHandle && 'createWritable' in fileHandle) {
-                try {
-                    let sessionsToSave = getSessionsWithCurrent();
-                    
-                    // Now we only save timeTracker data in this file
-                    fullJson = { timeTracker: { ...data, sessions: sessionsToSave } };
-                    const exportData = JSON.stringify(fullJson, null, 2);
-                    
-                    const writable = await fileHandle.createWritable();
-                    await writable.write(exportData);
-                    await writable.close();
-                    lastSavedTime = new Date();
-                    updateLastSaved();
-                    setSharedData();
-                    console.log('Auto-save completed');
-                } catch (err) {
-                    console.error('Auto-save error:', err);
-                    // Ignore auto-save errors
-                }
-            }
-        }
-        // --- CSV Export ---
+        
+        // --- Export Functions ---
         async function exportCSV() {
-            let filename = (data.projectName ? data.projectName : 'FusionTimekeeper') + '.csv';
+            let filename = 'FusionTimekeeper.csv';
             let sessionsToExport = getSessionsWithCurrent();
-            let csv = 'Project Name,' + (data.projectName || '') + '\n';
-            csv += 'Date,Session,Duration (HH:MM:SS)\n';
+            let csv = 'Date,Session,Duration (HH:MM:SS)\n';
             sessionsToExport.forEach(session => {
                 session.times.forEach((t, i) => {
                     csv += `${session.date},${i+1},${formatTime(t)}\n`;
@@ -386,50 +1062,25 @@
             });
             csv += `,,\n,,Overall Total:,${formatTime(getOverallTotal(sessionsToExport))}\n`;
             const blob = new Blob([csv], {type: 'text/csv'});
-            if ('showSaveFilePicker' in window) {
-                try {
-                    const handle = await window.showSaveFilePicker({
-                        suggestedName: filename,
-                        types: [{
-                            description: 'CSV Files',
-                            accept: {'text/csv': ['.csv']}
-                        }]
-                    });
-                    const writable = await handle.createWritable();
-                    await writable.write(csv);
-                    await writable.close();
-                } catch (err) {
-                    // fallback to download if cancelled
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = filename;
-                    document.body.appendChild(a);
-                    a.click();
-                    setTimeout(() => {
-                        document.body.removeChild(a);
-                        URL.revokeObjectURL(url);
-                    }, 100);
-                }
-            } else {
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = filename;
-                document.body.appendChild(a);
-                a.click();
-                setTimeout(() => {
-                    document.body.removeChild(a);
-                    URL.revokeObjectURL(url);
-                }, 100);
-            }
+            
+            // Use simple download approach
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            setTimeout(() => {
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            }, 100);
         }
+        
         // --- Markdown Export ---
         async function exportMarkdown() {
-            let filename = (data.projectName ? data.projectName : 'FusionTimekeeper') + '.md';
+            let filename = 'FusionTimekeeper.md';
             let sessionsToExport = getSessionsWithCurrent();
             let md = `# Fusion Timekeeper\n\n`;
-            md += `**Project Name:** ${data.projectName || ''}\n\n`;
             md += `| Date | Session | Duration (HH:MM:SS) |\n|------|---------|-------------------|\n`;
             sessionsToExport.forEach(session => {
                 session.times.forEach((t, i) => {
@@ -438,157 +1089,372 @@
             });
             md += `|  |  **Overall Total** | **${formatTime(getOverallTotal(sessionsToExport))}** |\n`;
             const blob = new Blob([md], {type: 'text/markdown'});
-            if ('showSaveFilePicker' in window) {
-                try {
-                    const handle = await window.showSaveFilePicker({
-                        suggestedName: filename,
-                        types: [{
-                            description: 'Markdown Files',
-                            accept: {'text/markdown': ['.md']}
-                        }]
-                    });
-                    const writable = await handle.createWritable();
-                    await writable.write(md);
-                    await writable.close();
-                } catch (err) {
-                    // fallback to download if cancelled
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = filename;
-                    document.body.appendChild(a);
-                    a.click();
-                    setTimeout(() => {
-                        document.body.removeChild(a);
-                        URL.revokeObjectURL(url);
-                    }, 100);
-                }
-            } else {
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = filename;
-                document.body.appendChild(a);
-                a.click();
-                setTimeout(() => {
-                    document.body.removeChild(a);
-                    URL.revokeObjectURL(url);
-                }, 100);
-            }
+            
+            // Use simple download approach
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            setTimeout(() => {
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            }, 100);
         }
-        // --- Event Handlers ---
-        startBtn.addEventListener('click', () => {
-            if (!startTime) {
-                startTime = Date.now();
-                timerInterval = setInterval(updateDisplay, 1000);
-                startBtn.disabled = true;
-                stopBtn.disabled = false;
-                resetBtn.disabled = false;
-            }
-        });
-        stopBtn.addEventListener('click', () => {
-            if (startTime) {
-                const seconds = Math.floor((Date.now() - startTime) / 1000) + elapsed;
-                saveSession(seconds);
-                resetTimerUI();
-            }
-        });
-        resetBtn.addEventListener('click', resetTimerUI);
-        dateDropdown.addEventListener('change', (e) => {
-            currentDate = e.target.value;
-            updateSessionList();
-        });
-        projectNameInput.addEventListener('input', (e) => {
-            data.projectName = e.target.value;
-            autoSave();
-        });
-        saveBtn.addEventListener('click', async () => {
-            // Always prompt for location if no fileHandle
-            if (!fileHandle) {
-                console.log('No file handle for save, will prompt for location');
-            }
-            await saveToFile();
-        });
-        importBtn.addEventListener('click', () => {
-            importFile.click();
-        });
-        importFile.addEventListener('change', (e) => {
-            const file = e.target.files[0];
-            if (!file) return;
-            const reader = new FileReader();
-            reader.onload = function(evt) {
-                try {
-                    const imported = JSON.parse(evt.target.result);
-                    fullJson = imported; // Store the complete JSON
-                    
-                    // Extract timeTracker data
-                    if (imported.timeTracker) {
-                        data = imported.timeTracker;
-                    } else if (imported.sessions && Array.isArray(imported.sessions)) {
-                        data = imported;
-                        // Convert old format to new format
-                        fullJson = { timeTracker: data };
-                    } else {
-                        throw new Error('No valid timeTracker data found');
-                    }
-                    
-                    projectNameInput.value = data.projectName || '';
-                    currentDate = data.sessions && data.sessions.length ? 
-                        data.sessions[data.sessions.length-1].date : getToday();
-                    updateDropdown();
-                    updateSessionList();
-                    resetTimerUI();
-                    fileHandle = null; // Reset file handle on import
-                    lastSavedTime = null;
-                    updateLastSaved();
-                    
-                    // Update shared data
-                    setSharedData();
-                    console.log('File imported successfully:', file.name);
-                } catch (err) {
-                    console.error('Import error:', err);
-                    alert('Failed to import: ' + err);
-                }
-            };
-            reader.readAsText(file);
-        });
-        csvBtn.addEventListener('click', exportCSV);
-        mdBtn.addEventListener('click', exportMarkdown);
         // --- Initialize ---
         function init() {
             console.log('Initializing TimeTracker palette');
             
-            // Check for existing shared data
-            if (window.fusionTimekeeperData && window.fusionTimekeeperData.timeTracker) {
-                console.log('Found shared timeTracker data');
-                fullJson = window.fusionTimekeeperData;
-                data = window.fusionTimekeeperData.timeTracker;
-                fileHandle = window.fusionTimekeeperFileHandle || null;
-            } else {
-                console.log('No shared data found, initializing empty');
-                data = {
-                    projectName: '',
-                    sessions: []
-                };
-                fullJson = { timeTracker: data };
+            // First, set up the default data structure
+            data = {
+                sessions: []
+            };
+            fullJson = { timeTracker: data };
+            
+            // Show initializing message
+            footer.textContent = 'Initializing palette and loading data...';
+            
+            // Send a paletteLoaded event to get initial data
+            console.log('Sending paletteLoaded event to get initial data...');
+            try {
+                const response = adskSendData('paletteLoaded', '{}');
+                console.log('paletteLoaded response received');
+                
+                if (typeof response === 'string' && response.trim()) {
+                    try {
+                        const initialData = JSON.parse(response);
+                        console.log('Processing initial data from palette load');
+                        
+                        if (initialData.success && initialData.timeData) {
+                            // Use the time data from response
+                            console.log('Using time data from initial response');
+                            fullJson = initialData.timeData;
+                            data = fullJson.timeTracker || { sessions: [] };
+                            
+                            // Set project info if available
+                            if (initialData.projectInfo) {
+                                projectInfo = initialData.projectInfo;
+                                console.log('Project info loaded');
+                            }
+                            
+                            // Update UI with the loaded data
+                            currentDate = data.sessions && data.sessions.length ? 
+                                data.sessions[data.sessions.length-1].date : getToday();
+                            
+                            // Update UI
+                            updateDropdown();
+                            updateSessionList();
+                            
+                            // Set last saved time
+                            lastSavedTime = new Date();
+                            updateLastSaved();
+                            
+                            console.log('Initial data loaded successfully');
+                            footer.textContent = `Loaded ${data.sessions.length} session(s) from initial data`;
+                        } else {
+                            console.warn('No valid time data in initial response, trying loadTimeData');
+                            // Try direct loadTimeData approach
+                            setTimeout(loadTimeData, 500);
+                        }
+                    } catch (e) {
+                        console.error('Error processing initial data:', e);
+                        // Try direct loadTimeData as fallback
+                        setTimeout(loadTimeData, 500);
+                    }
+                } else {
+                    console.warn('Empty or invalid response from paletteLoaded event, trying loadTimeData');
+                    // Try direct loadTimeData approach
+                    setTimeout(loadTimeData, 500);
+                }
+            } catch (e) {
+                console.error('Error sending paletteLoaded event:', e);
+                // Try direct loadTimeData as fallback
+                setTimeout(loadTimeData, 500);
             }
             
-            currentDate = data.sessions && data.sessions.length ? 
-                data.sessions[data.sessions.length-1].date : getToday();
-            projectNameInput.value = data.projectName || '';
+            // Setup interface
+            currentDate = getToday();
             updateDropdown();
             updateSessionList();
             resetTimerUI();
-            lastSavedTime = null;
             updateLastSaved();
+            
+            // Add a retry mechanism for loading data
+            setTimeout(() => {
+                console.log('Checking if data was loaded successfully...');
+                if (!data.sessions || data.sessions.length === 0) {
+                    console.log('No data loaded yet, trying again...');
+                    loadTimeData();
+                    
+                    // Double check after another delay
+                    setTimeout(() => {
+                        if (!data.sessions || data.sessions.length === 0) {
+                            console.log('Still no data, trying direct method...');
+                            footer.textContent = 'Making final attempt to load data...';
+                            loadTimeData();
+                            
+                            // Last resort - try emergency direct parameter reading
+                            setTimeout(() => {
+                                if (!data.sessions || data.sessions.length === 0) {
+                                    console.log('All standard attempts failed, trying emergency recovery...');
+                                    footer.textContent = 'Standard methods failed. Trying emergency recovery...';
+                                    window.readRawParameters();
+                                    
+                                    // Add emergency button if that fails too
+                                    setTimeout(() => {
+                                        if (!data.sessions || data.sessions.length === 0) {
+                                            footer.textContent = 'All automatic recovery methods failed.';
+                                            
+                                            // Add an emergency manual button
+                                            const emergencyBtn = document.createElement('button');
+                                            emergencyBtn.className = 'button';
+                                            emergencyBtn.style.backgroundColor = '#f44336';
+                                            emergencyBtn.textContent = 'Emergency Recovery';
+                                            emergencyBtn.addEventListener('click', () => {
+                                                window.readRawParameters();
+                                            });
+                                            
+                                            // Add button after footer
+                                            const container = document.querySelector('.container');
+                                            container.appendChild(emergencyBtn);
+                                        }
+                                    }, 3000);
+                                }
+                            }, 2000);
+                        }
+                    }, 2000);
+                }
+            }, 1000);
             
             // Set up auto-save every 5 minutes
             if (autoSaveInterval) clearInterval(autoSaveInterval);
             autoSaveInterval = setInterval(autoSave, 5 * 60 * 1000);
             
-            console.log('TimeTracker initialized');
+            console.log('TimeTracker initialization completed');
+        }
+        
+        function processInitialResponse(response, requestId) {
+            try {
+                console.log(`[${requestId}] Processing initial response`);
+                
+                let initialData;
+                if (typeof response === 'string') {
+                    console.log(`[${requestId}] Parsing response string`);
+                    initialData = JSON.parse(response);
+                } else if (typeof response === 'object') {
+                    console.log(`[${requestId}] Response is already an object`);
+                    initialData = response;
+                } else {
+                    throw new Error(`Invalid response type: ${typeof response}`);
+                }
+                
+                console.log(`[${requestId}] Parsed initial data:`, initialData);
+                
+                if (initialData.success) {
+                    console.log(`[${requestId}] Successful response received`);
+                    
+                    if (initialData.timeData) {
+                        console.log(`[${requestId}] Time data found in response`);
+                        // Use the time data
+                        fullJson = initialData.timeData;
+                        data = fullJson.timeTracker || { sessions: [] };
+                        
+                        const sessionCount = data.sessions ? data.sessions.length : 0;
+                        console.log(`[${requestId}] Found ${sessionCount} sessions in time data`);
+                        
+                        if (initialData.projectInfo) {
+                            projectInfo = initialData.projectInfo;
+                            console.log(`[${requestId}] Project info loaded:`, projectInfo);
+                        }
+                        
+                        // Update UI with the loaded data
+                        currentDate = data.sessions && data.sessions.length ? 
+                            data.sessions[data.sessions.length-1].date : getToday();
+                        console.log(`[${requestId}] Current date set to:`, currentDate);
+                        
+                        console.log(`[${requestId}] Updating UI...`);
+                        updateDropdown();
+                        updateSessionList();
+                        
+                        // Update last saved indicator
+                        lastSavedTime = new Date();
+                        updateLastSaved();
+                        
+                        console.log(`[${requestId}] Data loaded successfully`);
+                        
+                        // Update footer
+                        const footer = document.querySelector('.footer');
+                        footer.textContent = 'Data loaded successfully from document parameters';
+                        setTimeout(() => {
+                            footer.textContent = 'Time tracking data is stored with your Fusion 360 document using parameters';
+                        }, 3000);
+                        
+                        return;
+                    } else {
+                        console.log(`[${requestId}] No time data in successful response`);
+                    }
+                } else {
+                    console.warn(`[${requestId}] Response indicates failure:`, initialData.message || "Unknown error");
+                }
+                
+                // If we get here, response didn't contain usable time data
+                console.log(`[${requestId}] No time data in initial response, loading separately`);
+                loadTimeData();
+                
+            } catch (e) {
+                console.error(`[${requestId}] Error processing initial data:`, e);
+                console.error(`[${requestId}] Falling back to direct data loading`);
+                // Try loading time data separately
+                setTimeout(() => loadTimeData(), 500);
+            }
         }
         init();
+
+        // Add a new direct data receiver function that can be called via DOM manipulation
+        // This is a backup way for Fusion to inject data into the palette
+        window.receiveDirectData = function(jsonStr) {
+            console.log("Direct data received via DOM injection");
+            try {
+                console.log("Raw data received:", jsonStr.substring(0, 100));
+                const receivedData = JSON.parse(jsonStr);
+                console.log("Parsed data:", receivedData);
+                
+                if (receivedData && receivedData.timeTracker) {
+                    console.log("Valid timeTracker data received directly");
+                    
+                    // Update the global data
+                    data = receivedData.timeTracker;
+                    fullJson = receivedData;
+                    
+                    // Update UI
+                    if (data.sessions && data.sessions.length > 0) {
+                        currentDate = data.sessions[data.sessions.length - 1].date;
+                    } else {
+                        currentDate = getToday();
+                    }
+                    
+                    updateDropdown();
+                    updateSessionList();
+                    
+                    lastSavedTime = new Date();
+                    updateLastSaved();
+                    
+                    footer.textContent = `✅ Loaded ${data.sessions.length} session(s) via direct injection`;
+                    return true;
+                } else {
+                    console.warn("Invalid data format received");
+                    footer.textContent = "Error: Invalid data format";
+                    return false;
+                }
+            } catch (e) {
+                console.error("Error processing direct data:", e);
+                footer.textContent = `Error processing data: ${e.message}`;
+                return false;
+            }
+        };
+        
+        // Add a method to directly extract and process time parameters in emergencies
+        window.readRawParameters = function() {
+            console.log('EMERGENCY: Attempting direct parameter reading');
+            footer.textContent = 'Attempting emergency direct parameter reading...';
+            
+            try {
+                const response = adskSendData('readRawParameters', '{}');
+                console.log('Raw parameters response received:', typeof response);
+                
+                if (!response) {
+                    console.error('Error: No response from readRawParameters');
+                    return false;
+                }
+                
+                try {
+                    // Parse the response
+                    const parsed = (typeof response === 'string') ? JSON.parse(response) : response;
+                    console.log('Raw parameter data:', parsed);
+                    
+                    if (!parsed || !parsed.rawParameters) {
+                        console.error('No raw parameters found');
+                        return false;
+                    }
+                    
+                    // Extract time parameters
+                    const timeParams = parsed.rawParameters.filter(p => 
+                        p.name.startsWith('Time') && !isNaN(parseFloat(p.name.substring(4)))
+                    );
+                    
+                    console.log(`Found ${timeParams.length} time parameters`);
+                    if (timeParams.length === 0) return false;
+                    
+                    // Group by date from comments
+                    const sessionsByDate = {};
+                    
+                    // Extract dates and times
+                    timeParams.forEach(param => {
+                        try {
+                            // Extract date from comment
+                            let date = "Unknown";
+                            if (param.comment && param.comment.includes("Time entry on ")) {
+                                date = param.comment.replace("Time entry on ", "").trim();
+                            }
+                            
+                            // Parse the value
+                            let value = 0;
+                            try {
+                                if (param.value) {
+                                    value = parseFloat(param.value);
+                                } else if (param.rawExpression) {
+                                    value = parseFloat(param.rawExpression);
+                                }
+                            } catch (e) {
+                                console.error('Error parsing value:', e);
+                            }
+                            
+                            // Add to sessions by date
+                            if (!sessionsByDate[date]) {
+                                sessionsByDate[date] = [];
+                            }
+                            
+                            if (!isNaN(value) && value > 0) {
+                                sessionsByDate[date].push(value);
+                            }
+                        } catch (e) {
+                            console.error('Error processing parameter:', e);
+                        }
+                    });
+                    
+                    // Convert to sessions array
+                    const sessions = [];
+                    for (const date in sessionsByDate) {
+                        sessions.push({
+                            "date": date,
+                            "times": sessionsByDate[date]
+                        });
+                    }
+                    
+                    // Update global data
+                    if (sessions.length > 0) {
+                        console.log('Successfully reconstructed sessions:', sessions);
+                        data = { sessions: sessions };
+                        fullJson = { timeTracker: data };
+                        
+                        // Update UI
+                        currentDate = sessions[sessions.length - 1].date;
+                        updateDropdown();
+                        updateSessionList();
+                        
+                        footer.textContent = `Emergency recovery: Loaded ${sessions.length} session(s)`;
+                        return true;
+                    }
+                } catch (e) {
+                    console.error('Error parsing raw parameters:', e);
+                }
+            } catch (e) {
+                console.error('Error in readRawParameters:', e);
+            }
+            
+            return false;
+        };
     </script>
 </body>
 </html> 

@@ -92,9 +92,8 @@
         <h2>Project Notes</h2>
         <div class="user-message" id="userMsg">
             <button class="dismiss-btn" id="dismissMsg" title="Dismiss">&times;</button>
-            <b>Notes are now saved in a separate file</b> from your time tracking data.<br>
-            Click <b>Save</b> to create a notes file with the same base name as your project.<br>
-            Click <b>Load JSON</b> to open an existing notes file.
+            <b>Notes are stored with your Fusion 360 document</b><br>
+            Notes are automatically saved with your design and will be available whenever you open this file.
         </div>
         <div class="file-row">
             <button class="button" id="loadBtn">Load Notes</button>
@@ -111,11 +110,96 @@
         let jsonData = {};
         let fullJson = {};
         let fileHandle = null;
+        let projectInfo = null;
+        let usingParameters = true; // Flag to indicate if we're using parameters
 
         const notesArea = document.getElementById('notesArea');
         const saveBtn = document.getElementById('saveBtn');
         const loadBtn = document.getElementById('loadBtn');
         const importFile = document.getElementById('importFile');
+        
+        // --- Communication with Fusion 360 ---
+        window.fusionJavaScriptHandler = {
+            handle: function(action, data) {
+                try {
+                    const response = JSON.parse(data);
+                    console.log('Received from Fusion:', action, response);
+                    
+                    switch(action) {
+                        case 'notesLoaded':
+                            handleNotesLoaded(response);
+                            break;
+                        case 'notesSaved':
+                            handleNotesSaved(response);
+                            break;
+                        case 'projectInfo':
+                            handleProjectInfo(response);
+                            break;
+                    }
+                } catch (e) {
+                    console.error('Error in handle:', e);
+                }
+                return 'OK';
+            }
+        };
+        
+        function adskSendData(action, data) {
+            console.log('Attempting to send data to Fusion:', action);
+            console.log('window.adsk exists:', !!window.adsk);
+            if (window.adsk) {
+                console.log('window.adsk.fusionSendData exists:', !!window.adsk.fusionSendData);
+            }
+            
+            if (window.adsk && window.adsk.fusionSendData) {
+                console.log('Sending to Fusion:', action, data);
+                window.adsk.fusionSendData(JSON.stringify({
+                    action: action,
+                    ...data
+                }));
+            } else {
+                console.warn('Fusion API not available, falling back to file storage');
+                usingParameters = false;
+            }
+        }
+        
+        function handleNotesLoaded(response) {
+            if (response && response.notes !== undefined) {
+                notes = response.notes;
+                notesArea.value = notes;
+                console.log('Notes loaded from parameters');
+                
+                // Update the message
+                document.getElementById('userMsg').innerHTML = `
+                    <button class="dismiss-btn" id="dismissMsg" title="Dismiss">&times;</button>
+                    <b>Notes are stored with your Fusion 360 document</b><br>
+                    Notes are automatically saved with your design and will be available whenever you open this file.
+                `;
+                
+                // Re-attach the dismiss button event handler
+                document.getElementById('dismissMsg').addEventListener('click', function() {
+                    document.getElementById('userMsg').style.display = 'none';
+                });
+            }
+        }
+        
+        function handleNotesSaved(response) {
+            if (response && response.success) {
+                alert('Notes saved successfully to document parameters');
+            } else {
+                console.error('Failed to save notes to parameters');
+                alert('Failed to save notes to document parameters');
+            }
+        }
+        
+        function handleProjectInfo(response) {
+            projectInfo = response;
+            console.log('Project info:', projectInfo);
+            
+            // Update UI based on project info
+            if (projectInfo && projectInfo.name) {
+                document.querySelector('h2').textContent = 'Notes: ' + projectInfo.name;
+            }
+        }
 
         // --- Utility Functions ---
         function loadNotesFromJson(data) {
@@ -143,10 +227,16 @@
             return projectName || 'FusionTimekeeper';
         }
         
-        // --- File Load/Save Functions ---
+        // --- File Save/Load Functions ---
         async function saveToFile() {
             try {
-                // Create a notes-only JSON object
+                // First try to save to parameters if available
+                if (usingParameters) {
+                    adskSendData('saveNotes', { notes: notesArea.value });
+                    return;
+                }
+                
+                // Fall back to file-based storage if parameters not available
                 const notesData = {
                     notes: notesArea.value,
                     lastModified: new Date().toISOString(),
@@ -222,6 +312,13 @@
         }
         
         async function loadFromFile() {
+            // First try to load from parameters if available
+            if (usingParameters) {
+                adskSendData('loadNotes', {});
+                return;
+            }
+            
+            // Fall back to file-based loading if parameters not available
             try {
                 if ('showOpenFilePicker' in window) {
                     try {
@@ -339,7 +436,13 @@
         async function init() {
             console.log('Initializing Notes palette');
             
-            // Use shared data if available
+            // First try to get project info
+            adskSendData('getProjectInfo', {});
+            
+            // Then try to load notes from parameters
+            adskSendData('loadNotes', {});
+            
+            // Use shared data if available as fallback
             if (window.fusionTimekeeperData && window.fusionTimekeeperData.notes) {
                 console.log('Found notes in shared data');
                 notes = window.fusionTimekeeperData.notes;
@@ -352,9 +455,8 @@
                 // Update the message to explain the new approach
                 document.getElementById('userMsg').innerHTML = `
                     <button class="dismiss-btn" id="dismissMsg" title="Dismiss">&times;</button>
-                    <b>Notes are now saved in a separate file</b> from your time tracking data.<br>
-                    Click <b>Save</b> to create a notes file with the same base name as your project.<br>
-                    Click <b>Load JSON</b> to open an existing notes file.
+                    <b>Notes are stored with your Fusion 360 document</b><br>
+                    Notes are automatically saved with your design and will be available whenever you open this file.
                 `;
             }
             
