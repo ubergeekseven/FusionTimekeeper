@@ -31,11 +31,13 @@ NOTES_CMD_DESCRIPTION = 'Project notes and scratchpad'
 IS_PROMOTED = True
 
 # Define the location where the command button will be created
-WORKSPACE_ID = 'FusionSolidEnvironment'
-CUSTOM_TAB_ID = 'MichaelDotsToolsTab'
-CUSTOM_TAB_NAME = "MichaelDots's Tools"
-CUSTOM_PANEL_ID = 'MichaelDotsToolsPanel'
-CUSTOM_PANEL_NAME = 'Toolbox'
+WORKSPACE_ID = 'FusionSolidEnvironment'  # Design workspace (Solid)
+TAB_ID = 'SolidTab'                      # The built-in Solid tab
+PANEL_ID = 'SolidCreatePanel'            # The built-in Create panel
+
+# Define the dropdown information
+DROPDOWN_ID = 'TimeTrackerDropdown'
+DROPDOWN_NAME = 'Time Tracker Tools'
 
 # Resource locations for command icons
 TIMEKEEPER_ICON_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'resources', 'timekeeper_icon')
@@ -128,17 +130,25 @@ class FusionTimekeeperCommand:
             )
             workspace = self.ui.workspaces.itemById(WORKSPACE_ID)
             if workspace:
-                tab = workspace.toolbarTabs.itemById(CUSTOM_TAB_ID)
-                if not tab:
-                    tab = workspace.toolbarTabs.add(CUSTOM_TAB_ID, CUSTOM_TAB_NAME)
-                panel = tab.toolbarPanels.itemById(CUSTOM_PANEL_ID)
-                if not panel:
-                    panel = tab.toolbarPanels.add(CUSTOM_PANEL_ID, CUSTOM_PANEL_NAME)
-                control = panel.controls.addCommand(self.cmd_def)
-                control.isPromoted = IS_PROMOTED
-                handler = TimeTrackerCommandCreatedHandler(self.time_tracker)
-                self.cmd_def.commandCreated.add(handler)
-                self.handlers.append(handler)
+                tab = workspace.toolbarTabs.itemById(TAB_ID)
+                if tab:
+                    panel = tab.toolbarPanels.itemById(PANEL_ID)
+                    if panel:
+                        # Add or get the dropdown
+                        dropdown = panel.controls.itemById(DROPDOWN_ID)
+                        if not dropdown:
+                            dropdown = panel.controls.addDropDown(
+                                DROPDOWN_ID, DROPDOWN_NAME, '', ''
+                            )
+                        control = dropdown.controls.addCommand(self.cmd_def)
+                        control.isPromoted = IS_PROMOTED
+                        handler = TimeTrackerCommandCreatedHandler(self.time_tracker)
+                        self.cmd_def.commandCreated.add(handler)
+                        self.handlers.append(handler)
+                    else:
+                        self.ui.messageBox(f'Panel {PANEL_ID} not found')
+                else:
+                    self.ui.messageBox(f'Tab {TAB_ID} not found')
             else:
                 self.ui.messageBox(f'Workspace {WORKSPACE_ID} not found')
         except:
@@ -167,17 +177,25 @@ class NotesCommand:
             )
             workspace = self.ui.workspaces.itemById(WORKSPACE_ID)
             if workspace:
-                tab = workspace.toolbarTabs.itemById(CUSTOM_TAB_ID)
-                if not tab:
-                    tab = workspace.toolbarTabs.add(CUSTOM_TAB_ID, CUSTOM_TAB_NAME)
-                panel = tab.toolbarPanels.itemById(CUSTOM_PANEL_ID)
-                if not panel:
-                    panel = tab.toolbarPanels.add(CUSTOM_PANEL_ID, CUSTOM_PANEL_NAME)
-                control = panel.controls.addCommand(self.cmd_def)
-                control.isPromoted = IS_PROMOTED
-                handler = NotesCommandCreatedHandler()
-                self.cmd_def.commandCreated.add(handler)
-                self.handlers.append(handler)
+                tab = workspace.toolbarTabs.itemById(TAB_ID)
+                if tab:
+                    panel = tab.toolbarPanels.itemById(PANEL_ID)
+                    if panel:
+                        # Add or get the dropdown
+                        dropdown = panel.controls.itemById(DROPDOWN_ID)
+                        if not dropdown:
+                            dropdown = panel.controls.addDropDown(
+                                DROPDOWN_ID, DROPDOWN_NAME, '', ''
+                            )
+                        control = dropdown.controls.addCommand(self.cmd_def)
+                        control.isPromoted = IS_PROMOTED
+                        handler = NotesCommandCreatedHandler()
+                        self.cmd_def.commandCreated.add(handler)
+                        self.handlers.append(handler)
+                    else:
+                        self.ui.messageBox(f'Panel {PANEL_ID} not found')
+                else:
+                    self.ui.messageBox(f'Tab {TAB_ID} not found')
             else:
                 self.ui.messageBox(f'Workspace {WORKSPACE_ID} not found')
         except:
