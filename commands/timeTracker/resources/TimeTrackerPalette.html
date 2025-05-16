@@ -4,114 +4,259 @@
     <meta charset="UTF-8">
     <title>Fusion Timekeeper</title>
     <style>
+        /* Reset and base styles */
+        * {
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            background-color: #f9f9f9;
+        }
         body {
-            font-family: Arial, sans-serif;
-            margin: 20px;
-            background: #f8f8f8;
-        }
-        .container {
-            background: #fff;
-            border-radius: 8px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-            padding: 24px 20px 20px 20px;
-            max-width: 360px;
-            margin: 0 auto;
-        }
-        h2 {
-            text-align: center;
-            color: #1976D2;
-            margin-bottom: 18px;
-        }
-        .time-display {
-            font-size: 2.2em;
-            text-align: center;
-            margin: 18px 0 24px 0;
-            color: #333;
-            letter-spacing: 2px;
-        }
-        .button-row {
             display: flex;
-            justify-content: space-between;
+            flex-direction: column;
+            padding: 16px;
+            font-size: 14px;
         }
-        .button {
-            flex: 1;
+        
+        /* Toast notifications */
+        .toast {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 12px 20px;
+            border-radius: 4px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            z-index: 10000;
+            opacity: 0;
+            transform: translateY(-20px);
+            transition: all 0.3s ease;
+        }
+        .toast-info {
             background-color: #2196F3;
             color: white;
-            padding: 10px 0;
+        }
+        .toast-success {
+            background-color: #4CAF50;
+            color: white;
+        }
+        .toast-warning {
+            background-color: #FF9800;
+            color: black;
+        }
+        .toast-error {
+            background-color: #F44336;
+            color: white;
+        }
+        
+        /* Main container */
+        .container {
+            display: flex;
+            flex-direction: column;
+            flex-grow: 1;
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+            overflow: hidden;
+        }
+        
+        /* Header */
+        header {
+            background-color: #0078D7;
+            color: white;
+            padding: 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        header h1 {
+            margin: 0;
+            font-size: 18px;
+            font-weight: 500;
+        }
+        
+        /* Content area */
+        .content {
+            flex-grow: 1;
+            padding: 20px;
+            overflow-y: auto;
+        }
+        
+        /* Timer and controls */
+        .timer-display {
+            text-align: center;
+            font-size: 48px;
+            font-weight: 700;
+            margin: 20px 0;
+        }
+        .timer-controls {
+            display: flex;
+            justify-content: center;
+            margin-bottom: 20px;
+        }
+        .button {
+            padding: 10px 20px;
+            margin: 0 8px;
+            background-color: #0078D7;
+            color: white;
             border: none;
             border-radius: 4px;
             cursor: pointer;
-            margin: 0 4px;
-            font-size: 1em;
-            transition: background 0.2s;
+            transition: background-color 0.2s;
         }
-        .button:disabled {
-            background: #b0bec5;
-            cursor: not-allowed;
+        .button:hover {
+            background-color: #106EBE;
         }
-        .button:hover:not(:disabled) {
-            background-color: #1976D2;
+        .button:active {
+            background-color: #005A9E;
         }
-        .footer {
-            text-align: center;
-            margin-top: 18px;
-            font-size: 0.9em;
-            color: #888;
+        .button.danger {
+            background-color: #E81123;
         }
+        .button.danger:hover {
+            background-color: #D13438;
+        }
+        
+        /* Date selection */
+        .date-selector {
+            margin: 20px 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        .date-selector select, .date-selector input {
+            padding: 8px;
+            margin: 0 8px;
+            border: 1px solid #DDDDDD;
+            border-radius: 4px;
+        }
+        
+        /* Session list */
+        .sessions-container {
+            margin-top: 20px;
+        }
+        .sessions-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        .sessions-header h2 {
+            margin: 0;
+            font-size: 16px;
+        }
+        .sessions-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+        .sessions-table th {
+            text-align: left;
+            padding: 12px 8px;
+            background-color: #f5f5f5;
+            border-bottom: 2px solid #DDDDDD;
+            font-weight: 600;
+        }
+        .sessions-table td {
+            padding: 10px 8px;
+            border-bottom: 1px solid #EEEEEE;
+        }
+        
+        /* Section styling */
         .section {
             margin-top: 18px;
+            padding: 10px;
+            background-color: #f9f9f9;
+            border-radius: 4px;
+            border: 1px solid #eee;
         }
+        
+        /* Dropdown styling */
         .dropdown {
             width: 100%;
-            padding: 6px;
+            padding: 8px;
+            margin-bottom: 10px;
             border-radius: 4px;
-            border: 1px solid #ccc;
-            margin-bottom: 8px;
+            border: 1px solid #ddd;
         }
+        
+        /* Session list styling */
         .session-list {
             background: #f4f4f4;
             border-radius: 4px;
-            padding: 8px;
-            margin-bottom: 8px;
-            font-size: 0.98em;
+            padding: 10px;
+            margin-top: 10px;
         }
+        
         .session-list ul {
             margin: 0;
-            padding-left: 18px;
+            padding-left: 20px;
         }
+        
         .session-list li {
-            margin-bottom: 2px;
+            margin-bottom: 4px;
         }
-
+        
+        /* Overall total styling */
         .overall-total {
-            margin-top: 8px;
+            margin-top: 10px;
             font-weight: bold;
-            color: #1976D2;
+            color: #0078D7;
             text-align: right;
+            font-size: 14px;
         }
+        
+        /* Last saved info */
         .last-saved {
             text-align: right;
-            font-size: 0.92em;
+            font-size: 12px;
             color: #666;
-            margin-top: 4px;
-            margin-bottom: 8px;
+            margin-top: 5px;
+            margin-bottom: 10px;
+            font-style: italic;
         }
+        
+        /* Footer styling */
+        .footer {
+            text-align: center;
+            margin-top: 15px;
+            font-size: 0.9em;
+            color: #888;
+            padding: 8px;
+            border-top: 1px solid #eee;
+        }
+        
+        /* Export section */
         .export-row {
             display: flex;
-            justify-content: space-between;
-            margin-top: 8px;
+            justify-content: center;
+            margin-top: 20px;
+            margin-bottom: 10px;
         }
         .export-row .button {
-            flex: 1;
-            margin: 0 2px;
+            background-color: #107C10;
+        }
+        .export-row .button:hover {
+            background-color: #0E700E;
+        }
+        
+        /* Responsive adjustments */
+        @media (max-width: 600px) {
+            .timer-display {
+                font-size: 36px;
+            }
         }
     </style>
 </head>
 <body>
     <div class="container">
         <h2>Fusion Timekeeper</h2>
-        <div class="time-display" id="timeDisplay">00:00:00</div>
-        <div class="button-row">
+        <div class="timer-display" id="timeDisplay">00:00:00</div>
+        <div class="timer-controls">
             <button class="button" id="startBtn">Start</button>
             <button class="button" id="stopBtn" disabled>Stop</button>
             <button class="button" id="resetBtn" disabled>Reset</button>
@@ -122,7 +267,7 @@
             <div class="session-list" id="sessionList"></div>
             <div class="overall-total" id="overallTotal"></div>
         </div>
-        <div class="button-row" style="margin-top:10px;">
+        <div class="timer-controls" style="margin-top:10px;">
             <!-- <button class="button" id="saveBtn" style="background-color: #1976D2;">Save to Document</button> -->
             <button class="button" id="refreshBtn" style="background-color: #4CAF50;">Refresh Data</button>
             <button class="button" id="testBtn" style="background-color: #ff9800; display: none;">Simple Test</button>
@@ -1150,56 +1295,107 @@
         
         // --- Export Functions ---
         async function exportCSV() {
-            let filename = 'FusionTimekeeper.csv';
-            let sessionsToExport = getSessionsWithCurrent();
-            let csv = 'Date,Session,Duration (HH:MM:SS)\n';
-            sessionsToExport.forEach(session => {
-                session.times.forEach((t, i) => {
-                    csv += `${session.date},${i+1},${formatTime(t)}\n`;
+            try {
+                let sessionsToExport = getSessionsWithCurrent();
+                let csv = 'Date,Session,Duration (HH:MM:SS)\n';
+                sessionsToExport.forEach(session => {
+                    session.times.forEach((t, i) => {
+                        csv += `${session.date},${i+1},${formatTime(t)}\n`;
+                    });
                 });
-            });
-            csv += `,,\n,,Overall Total:,${formatTime(getOverallTotal(sessionsToExport))}\n`;
-            const blob = new Blob([csv], {type: 'text/csv'});
-            
-            // Use simple download approach
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = filename;
-            document.body.appendChild(a);
-            a.click();
-            setTimeout(() => {
-                document.body.removeChild(a);
-                URL.revokeObjectURL(url);
-            }, 100);
+                csv += `,,\n,,Overall Total:,${formatTime(getOverallTotal(sessionsToExport))}\n`;
+                
+                // Get file path from Fusion 360
+                const result = await sendFusionRequest('showSaveDialog', {
+                    title: 'Export to CSV',
+                    defaultFilename: 'FusionTimekeeper.csv',
+                    filterName: 'CSV Files',
+                    filterExtensions: '*.csv'
+                });
+                
+                if (result && result.success && result.filePath) {
+                    // Save the file to the selected path
+                    const saveResult = await sendFusionRequest('writeFile', {
+                        filePath: result.filePath,
+                        content: csv
+                    });
+                    
+                    if (saveResult && saveResult.success) {
+                        showToast('CSV file exported successfully', 'success');
+                    } else {
+                        showToast('Failed to save CSV file', 'error');
+                    }
+                }
+            } catch (error) {
+                console.error('Error exporting CSV:', error);
+                showToast('Error exporting CSV file', 'error');
+            }
         }
         
         // --- Markdown Export ---
         async function exportMarkdown() {
-            let filename = 'FusionTimekeeper.md';
-            let sessionsToExport = getSessionsWithCurrent();
-            let md = `# Fusion Timekeeper\n\n`;
-            md += `| Date | Session | Duration (HH:MM:SS) |\n|------|---------|-------------------|\n`;
-            sessionsToExport.forEach(session => {
-                session.times.forEach((t, i) => {
-                    md += `| ${session.date} | ${i+1} | ${formatTime(t)} |\n`;
+            try {
+                let sessionsToExport = getSessionsWithCurrent();
+                let md = `# Fusion Timekeeper\n\n`;
+                md += `| Date | Session | Duration (HH:MM:SS) |\n|------|---------|-------------------|\n`;
+                sessionsToExport.forEach(session => {
+                    session.times.forEach((t, i) => {
+                        md += `| ${session.date} | ${i+1} | ${formatTime(t)} |\n`;
+                    });
                 });
-            });
-            md += `|  |  **Overall Total** | **${formatTime(getOverallTotal(sessionsToExport))}** |\n`;
-            const blob = new Blob([md], {type: 'text/markdown'});
-            
-            // Use simple download approach
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = filename;
-            document.body.appendChild(a);
-            a.click();
-            setTimeout(() => {
-                document.body.removeChild(a);
-                URL.revokeObjectURL(url);
-            }, 100);
+                md += `|  |  **Overall Total** | **${formatTime(getOverallTotal(sessionsToExport))}** |\n`;
+                
+                // Get file path from Fusion 360
+                const result = await sendFusionRequest('showSaveDialog', {
+                    title: 'Export to Markdown',
+                    defaultFilename: 'FusionTimekeeper.md',
+                    filterName: 'Markdown Files',
+                    filterExtensions: '*.md'
+                });
+                
+                if (result && result.success && result.filePath) {
+                    // Save the file to the selected path
+                    const saveResult = await sendFusionRequest('writeFile', {
+                        filePath: result.filePath,
+                        content: md
+                    });
+                    
+                    if (saveResult && saveResult.success) {
+                        showToast('Markdown file exported successfully', 'success');
+                    } else {
+                        showToast('Failed to save Markdown file', 'error');
+                    }
+                }
+            } catch (error) {
+                console.error('Error exporting Markdown:', error);
+                showToast('Error exporting Markdown file', 'error');
+            }
         }
+        
+        // Helper function to show toast notifications
+        function showToast(message, type = 'info') {
+            const toast = document.createElement('div');
+            toast.className = `toast toast-${type}`;
+            toast.textContent = message;
+            
+            document.body.appendChild(toast);
+            
+            // Animate in
+            setTimeout(() => {
+                toast.style.opacity = '1';
+                toast.style.transform = 'translateY(0)';
+            }, 10);
+            
+            // Remove after delay
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                toast.style.transform = 'translateY(-20px)';
+                setTimeout(() => {
+                    document.body.removeChild(toast);
+                }, 300);
+            }, 3000);
+        }
+        
         // --- Initialize ---
         function init() {
             console.log('Initializing TimeTracker palette');

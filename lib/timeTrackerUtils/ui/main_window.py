@@ -105,6 +105,14 @@ class PaletteHTMLEventHandler(adsk.core.HTMLEventHandler):
                     # Return raw parameter data for debugging
                     self.handle_raw_parameters(html_args)
                     
+                elif action == 'showSaveDialog':
+                    # Handle file save dialog
+                    self.handle_show_save_dialog(html_args)
+                    
+                elif action == 'writeFile':
+                    # Handle file writing
+                    self.handle_write_file(html_args)
+                    
                 else:
                     log_warning(f"Unknown action received: '{action}'")
                     # Return a generic error response for unknown actions
@@ -727,6 +735,114 @@ class PaletteHTMLEventHandler(adsk.core.HTMLEventHandler):
             self.send_response(args, {
                 "success": False,
                 "message": f"Error getting raw parameters: {str(e)}"
+            })
+
+    def handle_show_save_dialog(self, args):
+        """Show a save file dialog and return the selected path."""
+        try:
+            data = {}
+            if args.data and args.data.strip():
+                try:
+                    data = json.loads(args.data)
+                except json.JSONDecodeError as je:
+                    log_error(f"JSON parse error in showSaveDialog: {je}")
+                    self.send_response(args, {
+                        "success": False,
+                        "message": f"Invalid JSON data: {str(je)}"
+                    })
+                    return
+            
+            # Get dialog parameters
+            title = data.get('title', 'Save File')
+            default_filename = data.get('defaultFilename', 'export.txt')
+            filter_name = data.get('filterName', 'Text Files')
+            filter_extensions = data.get('filterExtensions', '*.txt')
+            
+            log_info(f"Showing save dialog: {title} ({filter_name}: {filter_extensions})")
+            
+            # Get Fusion UI and show dialog
+            app = adsk.core.Application.get()
+            ui = app.userInterface
+            
+            file_dialog = ui.createFileDialog()
+            file_dialog.isMultiSelectEnabled = False
+            file_dialog.title = title
+            file_dialog.filter = f"{filter_name} ({filter_extensions})|{filter_extensions}"
+            # Instead of trying to set filename directly, use initialFilename
+            file_dialog.initialFilename = default_filename  
+            file_dialog.filterIndex = 0
+            
+            # Show save dialog
+            dialog_result = file_dialog.showSave()
+            
+            if dialog_result == adsk.core.DialogResults.DialogOK:
+                file_path = file_dialog.filename
+                log_info(f"File selected: {file_path}")
+                self.send_response(args, {
+                    "success": True,
+                    "filePath": file_path
+                })
+            else:
+                log_info("Save dialog canceled")
+                self.send_response(args, {
+                    "success": False,
+                    "canceled": True,
+                    "message": "Dialog canceled by user"
+                })
+                
+        except Exception as e:
+            log_error(f"Error showing save dialog: {str(e)}")
+            log_debug(f"Traceback: {traceback.format_exc()}")
+            self.send_response(args, {
+                "success": False,
+                "message": f"Error showing save dialog: {str(e)}"
+            })
+
+    def handle_write_file(self, args):
+        """Write content to a file."""
+        try:
+            data = {}
+            if args.data and args.data.strip():
+                try:
+                    data = json.loads(args.data)
+                except json.JSONDecodeError as je:
+                    log_error(f"JSON parse error in writeFile: {je}")
+                    self.send_response(args, {
+                        "success": False,
+                        "message": f"Invalid JSON data: {str(je)}"
+                    })
+                    return
+            
+            # Get file path and content
+            file_path = data.get('filePath', '')
+            content = data.get('content', '')
+            
+            if not file_path:
+                log_error("No file path provided for writeFile")
+                self.send_response(args, {
+                    "success": False,
+                    "message": "No file path provided"
+                })
+                return
+            
+            log_info(f"Writing file: {file_path} ({len(content)} characters)")
+            
+            # Write the file
+            with open(file_path, 'w', encoding='utf-8') as f:
+                f.write(content)
+            
+            log_info("File written successfully")
+            self.send_response(args, {
+                "success": True,
+                "message": "File written successfully"
+            })
+                
+        except Exception as e:
+            log_error(f"Error writing file: {str(e)}")
+            log_debug(f"Traceback: {traceback.format_exc()}")
+            self.send_response(args, {
+                "success": False,
+                "message": f"Error writing file: {str(e)}"
             })
 
 class TimeTrackerWindow:

@@ -200,7 +200,7 @@ find "$SCRIPT_DIR" -maxdepth 1 -type f | while read file; do
 done
 
 # Copy directories (excluding specific ones)
-find "$SCRIPT_DIR" -maxdepth 1 -type d | grep -v "^\$SCRIPT_DIR$" | while read dir; do
+find "$SCRIPT_DIR" -maxdepth 1 -type d | grep -v "^$SCRIPT_DIR$" | while read dir; do
     dirname=$(basename "$dir")
     if [[ "$dirname" != ".git" && "$dirname" != ".vscode" && "$dirname" != "__pycache__" && "$dirname" != "dist" && "$dirname" != ".cursor" ]]; then
         cp -R "$dir" "$TARGET_DIR/"
