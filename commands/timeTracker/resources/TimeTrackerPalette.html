@@ -79,6 +79,16 @@
             font-weight: 500;
         }
         
+        /* Title styling */
+        h2 {
+            text-align: center;
+            margin: 15px 0;
+            color: #000000;
+            font-weight: 500;
+            font-size: 20px;
+            width: 100%;
+        }
+        
         /* Content area */
         .content {
             flex-grow: 1;
@@ -118,6 +128,22 @@
             background-color: #E81123;
         }
         .button.danger:hover {
+            background-color: #D13438;
+        }
+        
+        /* Start and Stop button specific styling */
+        #startBtn {
+            background-color: #4CAF50; /* Green */
+            color: white;
+        }
+        #startBtn:hover {
+            background-color: #3e8e41;
+        }
+        #stopBtn {
+            background-color: #E81123; /* Red */
+            color: white;
+        }
+        #stopBtn:hover {
             background-color: #D13438;
         }
         
@@ -205,9 +231,9 @@
         .overall-total {
             margin-top: 10px;
             font-weight: bold;
-            color: #0078D7;
-            text-align: right;
-            font-size: 14px;
+            color: #001d35;
+            text-align: center;
+            font-size: 30px;
         }
         
         /* Last saved info */
@@ -250,6 +276,17 @@
                 font-size: 36px;
             }
         }
+        
+        /* Timer running animation */
+        @keyframes pulseGreen {
+            0% { background-color: #f9f9f9; }
+            50% { background-color: rgba(3, 255, 11, 0.699); }
+            100% { background-color: #f9f9f9; }
+        }
+        
+        .timer-running {
+            animation: pulseGreen 3s ease-in-out infinite;
+        }
     </style>
 </head>
 <body>
@@ -259,7 +296,6 @@
         <div class="timer-controls">
             <button class="button" id="startBtn">Start</button>
             <button class="button" id="stopBtn" disabled>Stop</button>
-            <button class="button" id="resetBtn" disabled>Reset</button>
         </div>
         <div class="section">
             <label for="dateDropdown"><b>Session Dates:</b></label>
@@ -317,7 +353,7 @@
 
         // --- DOM Elements ---
         // Will be initialized properly when document is ready
-        let timeDisplay, startBtn, stopBtn, resetBtn, dateDropdown, 
+        let timeDisplay, startBtn, stopBtn, dateDropdown, 
             sessionList, saveBtn, overallTotal, 
             lastSaved, csvBtn, mdBtn, refreshBtn, testBtn, 
             debugDataReceiver, footer;
@@ -328,7 +364,6 @@
             timeDisplay = document.getElementById('timeDisplay');
             startBtn = document.getElementById('startBtn');
             stopBtn = document.getElementById('stopBtn');
-            resetBtn = document.getElementById('resetBtn');
             dateDropdown = document.getElementById('dateDropdown');
             sessionList = document.getElementById('sessionList');
             // projectNameInput = document.getElementById('projectName');
@@ -365,7 +400,9 @@
                         timerInterval = setInterval(updateDisplay, 1000);
                         startBtn.disabled = true;
                         stopBtn.disabled = false;
-                        resetBtn.disabled = false;
+                        
+                        // Add the pulsing background effect
+                        document.body.classList.add('timer-running');
                         
                         // Log the start of timing
                         console.log('Timer started');
@@ -386,6 +423,9 @@
                         // Reset the timer UI
                         resetTimerUI();
                         
+                        // Remove the pulsing background effect
+                        document.body.classList.remove('timer-running');
+                        
                         // Show confirmation in footer
                         const footer = document.querySelector('.footer');
                         footer.textContent = `Session of ${formatTime(seconds)} saved successfully`;
@@ -395,8 +435,6 @@
                     }
                 });
             }
-            
-            if (resetBtn) resetBtn.addEventListener('click', resetTimerUI);
             
             if (dateDropdown) {
                 dateDropdown.addEventListener('change', (e) => {
@@ -1250,9 +1288,11 @@
             clearInterval(timerInterval);
             updateDisplay();
             
+            // Remove the pulsing background effect if it's still active
+            document.body.classList.remove('timer-running');
+            
             if (startBtn) startBtn.disabled = false;
             if (stopBtn) stopBtn.disabled = true;
-            if (resetBtn) resetBtn.disabled = true;
         }
         
         // --- File Save/Load Functions ---
