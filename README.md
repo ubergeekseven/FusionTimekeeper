@@ -7,6 +7,11 @@ A Fusion 360 add-in for tracking time spent on design projects. This add-in allo
 - Maintain separate time tracking for each project
 - Automatically save and restore time tracking data
 
+## Warning about storage and multiple projects
+- Since this uses a palette for the interface, the program does not see the different open projects if you switch between.
+- Make sure to close the window before switching projects or the data will get stored between projects and mix together if using the timer in one project and then switching and using again.
+- You can delete false data from the parameters if this happens since they are stored in the user parameters.
+
 ## Installation
 
 ### For End Users
@@ -57,15 +62,4 @@ To create a distribution package for end users:
 
 ## Data Storage
 
-Time tracking data is stored in a `.timekeeper` directory within each project's folder. The data is stored in an SQLite database, making it:
-- Reliable and consistent
-- Easy to backup
-- Project-specific
-- Automatically saved
-
-## Requirements
-
-- Fusion 360
-- Python 3.7 or higher
-- PyQt5
-- pandas
+Time is stored as user parameters in the project. 
