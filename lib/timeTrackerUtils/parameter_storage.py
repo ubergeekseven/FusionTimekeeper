@@ -36,20 +36,33 @@ class ParameterStorage:
             log_error("CRITICAL ERROR: No application instance found")
             return None
         
-        # Get active document
-        doc = app.activeDocument
-        if not doc:
-            log_error("CRITICAL ERROR: No active document found")
-            return None
+        try:
+            # Get active document with proper error handling
+            doc = app.activeDocument
+            if not doc:
+                log_warning("No active document found - this is normal during initial load")
+                return None
+                
+            # Get the design
+            design = adsk.fusion.Design.cast(doc.products.itemByProductType('DesignProductType'))
+            if not design:
+                log_error("No design found in active document")
+                return None
+                
+            log_info(f"Active document found: {doc.name}")
+            return design
             
-        # Get the design
-        design = adsk.fusion.Design.cast(doc.products.itemByProductType('DesignProductType'))
-        if not design:
-            log_error("CRITICAL ERROR: No design found in active document")
+        except RuntimeError as e:
+            # Handle the specific InternalValidationError that occurs during initial load
+            if "InternalValidationError" in str(e):
+                log_warning("Runtime validation error while accessing activeDocument - this is normal during initial load")
+            else:
+                log_error(f"RuntimeError in get_active_document: {str(e)}")
             return None
-            
-        log_info(f"Active document found: {doc.name}")
-        return design
+        except Exception as e:
+            log_error(f"Error in get_active_document: {str(e)}")
+            log_debug(f"Traceback: {traceback.format_exc()}")
+            return None
     
     @staticmethod
     def store_time_data(data):
@@ -247,8 +260,9 @@ class ParameterStorage:
             log_info("Attempting to retrieve time data from parameters")
             design = ParameterStorage.get_active_document()
             if not design:
-                log_error("Failed to get active document")
-                return None
+                log_warning("No active document available - returning empty data structure")
+                log_info("=== END PARAMETER RETRIEVAL DEBUG ===\n")
+                return {"timeTracker": {"sessions": []}}
                 
             # Debug parameter count
             params = design.userParameters
@@ -350,7 +364,8 @@ class ParameterStorage:
         try:
             design = ParameterStorage.get_active_document()
             if not design:
-                return None
+                log_warning("No active document available for sequential parameter retrieval")
+                return {"timeTracker": {"sessions": []}}
                 
             params = design.userParameters
             
