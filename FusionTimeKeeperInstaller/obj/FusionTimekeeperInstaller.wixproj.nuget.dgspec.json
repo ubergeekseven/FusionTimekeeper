@@ -1,17 +1,17 @@
 {
   "format": 1,
   "restore": {
-    "G:\\FusionTimekeeper\\dist\\FusionTimeKeeperInstaller\\FusionTimekeeperInstaller.wixproj": {}
+    "G:\\FusionTimekeeper\\FusionTimeKeeperInstaller\\FusionTimekeeperInstaller.wixproj": {}
   },
   "projects": {
-    "G:\\FusionTimekeeper\\dist\\FusionTimeKeeperInstaller\\FusionTimekeeperInstaller.wixproj": {
+    "G:\\FusionTimekeeper\\FusionTimeKeeperInstaller\\FusionTimekeeperInstaller.wixproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "G:\\FusionTimekeeper\\dist\\FusionTimeKeeperInstaller\\FusionTimekeeperInstaller.wixproj",
+        "projectUniqueName": "G:\\FusionTimekeeper\\FusionTimeKeeperInstaller\\FusionTimekeeperInstaller.wixproj",
         "projectName": "FusionTimekeeperInstaller",
-        "projectPath": "G:\\FusionTimekeeper\\dist\\FusionTimeKeeperInstaller\\FusionTimekeeperInstaller.wixproj",
+        "projectPath": "G:\\FusionTimekeeper\\FusionTimeKeeperInstaller\\FusionTimekeeperInstaller.wixproj",
         "packagesPath": "C:\\Users\\Tech\\.nuget\\packages\\",
-        "outputPath": "G:\\FusionTimekeeper\\dist\\FusionTimeKeeperInstaller\\obj\\",
+        "outputPath": "G:\\FusionTimekeeper\\FusionTimeKeeperInstaller\\obj\\",
         "projectStyle": "PackageReference",
         "UsingMicrosoftNETSdk": false,
         "configFilePaths": [
@@ -37,7 +37,13 @@
       },
       "frameworks": {
         "native": {
-          "targetAlias": "wix600"
+          "targetAlias": "wix600",
+          "dependencies": {
+            "WixToolset.UI.wixext": {
+              "target": "Package",
+              "version": "[6.0.0, )"
+            }
+          }
         }
       }
     }

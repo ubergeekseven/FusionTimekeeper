@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
 
   <Package
       Name="FusionTimekeeper"
@@ -10,6 +11,27 @@
       InstallerVersion="500"
       Compressed="yes">
 
+	  <!-- built-in 3-page wizard: Welcome → Install → Finished -->
+	<ui:WixUI 
+		Id="WixUI_FeatureTree"
+        InstallDirectory="INSTALLFOLDER"
+		/>
+	<WixVariable
+	  Id="WixUIDialogBmp"
+	  Value="dlgbmp.png"
+	  />
+	<WixVariable
+	  Id="WixUIBannerBmp"
+	  Value="bannrbmp.png"
+	  />
+	<WixVariable
+	  Id="WixUINewIco"
+	  Value="icon.png"
+	  />
+    <WixVariable
+	  Id="WixUIUpIco"
+	  Value="icon.png"
+	  />
     <Icon     Id="ProductIcon" SourceFile="TimeKeeper.ico"/>
     <Property Id="ARPPRODUCTICON" Value="ProductIcon"/>
 

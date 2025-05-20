@@ -1,11 +1,37 @@
 {
   "version": 3,
   "targets": {
-    "native,Version=v0.0": {}
+    "native,Version=v0.0": {
+      "WixToolset.UI.wixext/6.0.0": {
+        "type": "package",
+        "build": {
+          "build/WixToolset.UI.wixext.targets": {}
+        }
+      }
+    }
   },
-  "libraries": {},
+  "libraries": {
+    "WixToolset.UI.wixext/6.0.0": {
+      "sha512": "+pOLifam0b7urBxACAMc+ynCrLVrjZPEID4QeRHwQoLekFfybDxN3PGvAvIyHeqHBcOAH+6Ghu4ZBXmgg+IYYQ==",
+      "type": "package",
+      "path": "wixtoolset.ui.wixext/6.0.0",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "OSMFEULA.txt",
+        "README.md",
+        "build/WixToolset.UI.wixext.targets",
+        "icon.png",
+        "wixext6/WixToolset.UI.wixext.dll",
+        "wixtoolset.ui.wixext.6.0.0.nupkg.sha512",
+        "wixtoolset.ui.wixext.nuspec"
+      ]
+    }
+  },
   "projectFileDependencyGroups": {
-    "native,Version=v0.0": []
+    "native,Version=v0.0": [
+      "WixToolset.UI.wixext >= 6.0.0"
+    ]
   },
   "packageFolders": {
     "C:\\Users\\Tech\\.nuget\\packages\\": {}
@@ -13,11 +39,11 @@
   "project": {
     "version": "1.0.0",
     "restore": {
-      "projectUniqueName": "G:\\FusionTimekeeper\\dist\\FusionTimeKeeperInstaller\\FusionTimekeeperInstaller.wixproj",
+      "projectUniqueName": "G:\\FusionTimekeeper\\FusionTimeKeeperInstaller\\FusionTimekeeperInstaller.wixproj",
       "projectName": "FusionTimekeeperInstaller",
-      "projectPath": "G:\\FusionTimekeeper\\dist\\FusionTimeKeeperInstaller\\FusionTimekeeperInstaller.wixproj",
+      "projectPath": "G:\\FusionTimekeeper\\FusionTimeKeeperInstaller\\FusionTimekeeperInstaller.wixproj",
       "packagesPath": "C:\\Users\\Tech\\.nuget\\packages\\",
-      "outputPath": "G:\\FusionTimekeeper\\dist\\FusionTimeKeeperInstaller\\obj\\",
+      "outputPath": "G:\\FusionTimekeeper\\FusionTimeKeeperInstaller\\obj\\",
       "projectStyle": "PackageReference",
       "UsingMicrosoftNETSdk": false,
       "configFilePaths": [
@@ -43,7 +69,13 @@
     },
     "frameworks": {
       "native": {
-        "targetAlias": "wix600"
+        "targetAlias": "wix600",
+        "dependencies": {
+          "WixToolset.UI.wixext": {
+            "target": "Package",
+            "version": "[6.0.0, )"
+          }
+        }
       }
     }
   }

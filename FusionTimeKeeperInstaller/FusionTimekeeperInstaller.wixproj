@@ -9,7 +9,17 @@
     <!-- ✱  shut off the automatic *.wxs inclusion  ✱ -->
     <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
   </PropertyGroup>
-
+  
+  <ItemGroup>
+    <PackageReference Include="WixToolset.UI.wixext" Version="6.0.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <BindVariable Include="WixUILicenseRtf=license.rtf" />
+  </ItemGroup>
+  <ItemGroup>
+    <WixExtension Include="WixToolset.UI" />
+  </ItemGroup>
+  
   <ItemGroup>
     <!-- compile exactly the files you want, once -->
     <Compile Include="Product.wxs"/>

@@ -1,6 +1,10 @@
-BuiltContentOutput	G:\FusionTimekeeper\dist\FusionTimeKeeperInstaller\obj\x64\Debug\cab1.cab
-BuiltPdbOutput	G:\FusionTimekeeper\dist\FusionTimeKeeperInstaller\obj\x64\Debug\FusionTimekeeperInstaller.wixpdb
-BuiltTargetOutput	G:\FusionTimekeeper\dist\FusionTimeKeeperInstaller\obj\x64\Debug\FusionTimekeeperInstaller.msi
+BuiltContentOutput	G:\FusionTimekeeper\FusionTimeKeeperInstaller\obj\x64\Release\cab1.cab
+BuiltPdbOutput	G:\FusionTimekeeper\FusionTimeKeeperInstaller\obj\x64\Release\FusionTimekeeperInstaller.wixpdb
+BuiltTargetOutput	G:\FusionTimekeeper\FusionTimeKeeperInstaller\obj\x64\Release\FusionTimekeeperInstaller.msi
+Input	bannrbmp.png
+Input	C:\Users\Tech\.nuget\packages\wixtoolset.ui.wixext\6.0.0\wixext6\WixToolset.UI.wixext.dll
+Input	dlgbmp.png
+Input	icon.png
 Input	src\AddInIcon.svg
 Input	src\commands\timeTracker\entry.py
 Input	src\commands\timeTracker\main_window.py
@@ -27,4 +31,6 @@ Input	src\lib\__init__.py
 Input	src\README.md
 Input	src\requirements.txt
 Input	TimeKeeper.ico
-Intermediate	G:\FusionTimekeeper\dist\FusionTimeKeeperInstaller\obj\x64\Debug\cab1.cab
+Intermediate	G:\FusionTimekeeper\FusionTimeKeeperInstaller\obj\x64\Release\cab1.cab
+Intermediate	G:\FusionTimekeeper\FusionTimeKeeperInstaller\obj\x64\Release\WixToolset.UI.wixext__W88OiIQ0rnTnfoTvzqgPniYKVw\wix-ir\exclamic.ico
+Intermediate	G:\FusionTimekeeper\FusionTimeKeeperInstaller\obj\x64\Release\WixToolset.UI.wixext__W88OiIQ0rnTnfoTvzqgPniYKVw\wix-ir\info.ico

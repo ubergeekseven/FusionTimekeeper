@@ -1,8 +1,10 @@
 {
   "version": 2,
-  "dgSpecHash": "nEqfkjKzHSs=",
+  "dgSpecHash": "g1XrstvC+tA=",
   "success": true,
-  "projectFilePath": "G:\\FusionTimekeeper\\dist\\FusionTimeKeeperInstaller\\FusionTimekeeperInstaller.wixproj",
-  "expectedPackageFiles": [],
+  "projectFilePath": "G:\\FusionTimekeeper\\FusionTimeKeeperInstaller\\FusionTimekeeperInstaller.wixproj",
+  "expectedPackageFiles": [
+    "C:\\Users\\Tech\\.nuget\\packages\\wixtoolset.ui.wixext\\6.0.0\\wixtoolset.ui.wixext.6.0.0.nupkg.sha512"
+  ],
   "logs": []
 }
