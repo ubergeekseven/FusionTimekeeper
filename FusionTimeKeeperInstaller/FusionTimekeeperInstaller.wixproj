@@ -1,0 +1,19 @@
+<!-- FusionTimekeeperInstaller.wixproj -->
+<Project Sdk="WixToolset.Sdk/6.0.0">
+
+  <PropertyGroup>
+    <OutputType>Package</OutputType>
+    <TargetFramework>wix600</TargetFramework>
+    <Platform>x64</Platform>
+
+    <!-- ✱  shut off the automatic *.wxs inclusion  ✱ -->
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- compile exactly the files you want, once -->
+    <Compile Include="Product.wxs"/>
+    <Compile Include="Files.wxs"/>
+  </ItemGroup>
+
+</Project>

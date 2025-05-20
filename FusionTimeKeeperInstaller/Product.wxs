@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+
+  <Package
+      Name="FusionTimekeeper"
+      Version="1.0.0.0"
+      Manufacturer="Dot"
+      Scope="perUser"
+      UpgradeCode="b33c93f7-2023-4cf4-8e96-1b508697aaba"
+      InstallerVersion="500"
+      Compressed="yes">
+
+    <Icon     Id="ProductIcon" SourceFile="TimeKeeper.ico"/>
+    <Property Id="ARPPRODUCTICON" Value="ProductIcon"/>
+
+	<StandardDirectory Id="AppDataFolder">
+	  <Directory Id="DIR_AUTODESK" Name="Autodesk">
+		<Directory Id="DIR_FUSION" Name="Autodesk Fusion 360">
+		  <Directory Id="DIR_API"   Name="API">
+			<Directory Id="DIR_ADDINS" Name="AddIns">
+			  <Directory Id="INSTALLFOLDER" Name="FusionTimekeeper"/>
+			</Directory>
+		  </Directory>
+		</Directory>
+	  </Directory>
+	</StandardDirectory>
+
+
+    <Feature Id="MainFeature" Title="FusionTimekeeper Add-In" Level="1">
+      <ComponentGroupRef Id="AllFiles"/>
+    </Feature>
+
+  </Package>
+</Wix>

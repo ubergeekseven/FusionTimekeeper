@@ -1,0 +1,184 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+
+  <Fragment>
+
+    <!-- everything installs beneath INSTALLFOLDER (%APPDATA%\…\AddIns\FusionTimekeeper) -->
+    <DirectoryRef Id="INSTALLFOLDER">
+
+      <!-- ───────── commands root ───────── -->
+      <Directory Id="DIR_COMMANDS" Name="commands">
+        <Component Id="Cmp_CmdInit" Guid="1312E0D8-3E18-4BDE-6EF2-6F28BA4F9A56" Directory="DIR_COMMANDS">
+          <RegistryValue Root="HKCU"
+                         Key="Software\FusionTimekeeper\Commands"
+                         Value="installed"
+                         Type="string"
+                         KeyPath="yes"/>
+		  <RemoveFolder Id="RF_DIR_COMMANDS" On="uninstall"/>
+          <File Id="F_Cmd_Init" Source="src\commands\__init__.py"/>
+        </Component>
+
+        <!-- commands\timeTracker -->
+        <Directory Id="DIR_TT" Name="timeTracker">
+          <Component Id="Cmp_TimeTracker" Guid="1312E0D8-3E18-4BDE-9EF2-6F28BA9F9A56" Directory="DIR_TT">
+            <RegistryValue Root="HKCU"
+                           Key="Software\FusionTimekeeper\TimeTracker"
+                           Value="installed"
+                           Type="string"
+                           KeyPath="yes"/>
+			<RemoveFolder Id="RF_DIR_TT" On="uninstall"/>
+            <File Id="F_TT_Init"  Source="src\commands\timeTracker\__init__.py"/>
+            <File Id="F_TT_Entry" Source="src\commands\timeTracker\entry.py"/>
+            <File Id="F_TT_Main"  Source="src\commands\timeTracker\main_window.py"/>
+          </Component>
+
+          <!-- resources -->
+          <Directory Id="DIR_TT_RES" Name="resources">
+            <Component Id="Cmp_TT_Html" Guid="5349BB29-9C2F-47B9-9D55-3487D2B6A6F1" Directory="DIR_TT_RES">
+              <RegistryValue Root="HKCU"
+                             Key="Software\FusionTimekeeper\TimeTracker\Resources"
+                             Value="installed"
+                             Type="string"
+                             KeyPath="yes"/>
+              <RemoveFolder Id="RF_DIR_TT_RES" On="uninstall"/>
+              <File Id="F_TT_NotesHtml" Source="src\commands\timeTracker\resources\NotesPalette.html"/>
+              <File Id="F_TT_TrackHtml" Source="src\commands\timeTracker\resources\TimeTrackerPalette.html"/>
+            </Component>
+
+            <!-- notes_icon -->
+            <Directory Id="DIR_NOTES_ICON" Name="notes_icon">
+              
+              <Component Id="Cmp_NotesIcons" Guid="23C89874-93CB-4C28-A5ED-6A987CACF0C6" Directory="DIR_NOTES_ICON">
+                <RegistryValue Root="HKCU"
+                               Key="Software\FusionTimekeeper\TimeTracker\NotesIcon"
+                               Value="installed"
+                               Type="string"
+                               KeyPath="yes"/>
+				<RemoveFolder Id="RF_DIR_NOTES_ICON" On="uninstall"/>
+                <File Id="F_NI_16" Source="src\commands\timeTracker\resources\notes_icon\16x16.png"/>
+                <File Id="F_NI_32" Source="src\commands\timeTracker\resources\notes_icon\32x32.png"/>
+                <File Id="F_NI_64" Source="src\commands\timeTracker\resources\notes_icon\64x64.png"/>
+              </Component>
+            </Directory>
+
+            <!-- timekeeper_icon -->
+            <Directory Id="DIR_TK_ICON" Name="timekeeper_icon">
+              
+              <Component Id="Cmp_TimekeeperIcons" Guid="9B6B05E2-A5AE-4B4D-8237-69F22C059AB3" Directory="DIR_TK_ICON">
+                <RegistryValue Root="HKCU"
+                               Key="Software\FusionTimekeeper\TimeTracker\TKIcon"
+                               Value="installed"
+                               Type="string"
+                               KeyPath="yes"/>
+				<RemoveFolder Id="RF_DIR_TK_ICON" On="uninstall"/>
+                <File Id="F_TK_16" Source="src\commands\timeTracker\resources\timekeeper_icon\16x16.png"/>
+                <File Id="F_TK_32" Source="src\commands\timeTracker\resources\timekeeper_icon\32x32.png"/>
+                <File Id="F_TK_64" Source="src\commands\timeTracker\resources\timekeeper_icon\64x64.png"/>
+              </Component>
+            </Directory>
+          </Directory>
+        </Directory>
+      </Directory>
+
+      <!-- ───────── lib ───────── -->
+      <Directory Id="DIR_LIB" Name="lib">
+        
+        <Component Id="Cmp_LibCore" Guid="6D9259E5-0B0B-4CE5-8F25-CAC1665A9083" Directory="DIR_LIB">
+          <RegistryValue Root="HKCU"
+                         Key="Software\FusionTimekeeper\Lib"
+                         Value="installed"
+                         Type="string"
+                         KeyPath="yes"/>
+          <RemoveFolder Id="RF_DIR_LIB" On="uninstall"/>
+          <File Id="F_Lib_Init" Source="src\lib\__init__.py"/>
+          <File Id="F_Lib_Util" Source="src\lib\fusionAddInUtils.py"/>
+        </Component>
+
+        <!-- lib\timeTrackerUtils -->
+        <Directory Id="DIR_LIB_TT" Name="timeTrackerUtils">
+          
+          <Component Id="Cmp_LibTT" Guid="3A623DFE-6EDC-4B82-96CA-E1B2EFD29964" Directory="DIR_LIB_TT">
+            <RegistryValue Root="HKCU"
+                           Key="Software\FusionTimekeeper\Lib\TT"
+                           Value="installed"
+                           Type="string"
+                           KeyPath="yes"/>
+			<RemoveFolder Id="RF_DIR_LIB_TT" On="uninstall"/>			   
+            <File Id="F_LTT_Init"  Source="src\lib\timeTrackerUtils\__init__.py"/>
+            <File Id="F_LTT_Param" Source="src\lib\timeTrackerUtils\parameter_storage.py"/>
+            <File Id="F_LTT_Track" Source="src\lib\timeTrackerUtils\time_tracker.py"/>
+          </Component>
+
+          <!-- lib\timeTrackerUtils\ui -->
+          <Directory Id="DIR_LIB_TT_UI" Name="ui">
+            <Component Id="Cmp_LibTT_UI" Guid="F2E0B7F2-9ED7-4F7E-BA6A-14F0F633D448" Directory="DIR_LIB_TT_UI">
+              <RegistryValue Root="HKCU"
+                             Key="Software\FusionTimekeeper\Lib\TT\UI"
+                             Value="installed"
+                             Type="string"
+                             KeyPath="yes"/>
+			  <RemoveFolder Id="RF_DIR_LIB_TT_UI" On="uninstall"/>
+              <File Id="F_UI_Init"  Source="src\lib\timeTrackerUtils\ui\__init__.py"/>
+              <File Id="F_UI_Main"  Source="src\lib\timeTrackerUtils\ui\main_window.py"/>
+              <File Id="F_UI_Notes" Source="src\lib\timeTrackerUtils\ui\notes_window.py"/>
+            </Component>
+          </Directory>
+        </Directory>
+      </Directory>
+
+      <!-- ───────── root files (INSTALLFOLDER) ───────── -->
+      <Component Id="Cmp_Core" Guid="8A8E9F11-1D5B-4F7E-909B-8F3B4C6257CA" Directory="INSTALLFOLDER">
+        <RegistryValue Root="HKCU"
+                       Key="Software\FusionTimekeeper"
+                       Value="installed"
+                       Type="string"
+                       KeyPath="yes"/>
+        <File Id="F_Core_Py"       Source="src\FusionTimekeeper.py"/>
+        <File Id="F_Core_Manifest" Source="src\FusionTimekeeper.manifest"/>
+        <File Id="F_Core_Svg"      Source="src\AddInIcon.svg"/>
+        <File Id="F_Core_Readme"   Source="src\README.md"/>
+        <File Id="F_Core_Req"      Source="src\requirements.txt"/>
+      </Component>
+
+	<!-- Removes INSTALLFOLDER and every parent folder we own -->
+	<Component Id="Cmp_CleanupRoot"
+			   Guid="C78BA76E-4F54-4F07-9E0F-5070899B7C15"
+			   Directory="INSTALLFOLDER">
+
+	  <!-- keypath -->
+	  <RegistryValue Root="HKCU"
+					 Key="Software\FusionTimekeeper"
+					 Name="Cleanup"
+					 Value="1"
+					 Type="integer"
+					 KeyPath="yes"/>
+
+	  <!-- remove this folder -->
+	  <RemoveFolder Id="RF_INSTALLFOLDER" Directory="INSTALLFOLDER" On="uninstall"/>
+
+	  <!-- remove parents (order: deepest first) -->
+	  <RemoveFolder Id="RF_DIR_ADDINS"  Directory="DIR_ADDINS"  On="uninstall"/>
+	  <RemoveFolder Id="RF_DIR_API"     Directory="DIR_API"     On="uninstall"/>
+	  <RemoveFolder Id="RF_DIR_FUSION"  Directory="DIR_FUSION"  On="uninstall"/>
+	  <RemoveFolder Id="RF_DIR_AUTODESK" Directory="DIR_AUTODESK" On="uninstall"/>
+	</Component>
+
+
+    </DirectoryRef>
+
+    <!-- group used by Product.wxs -->
+    <ComponentGroup Id="AllFiles">
+      <ComponentRef Id="Cmp_CmdInit"/>
+      <ComponentRef Id="Cmp_TimeTracker"/>
+      <ComponentRef Id="Cmp_TT_Html"/>
+      <ComponentRef Id="Cmp_NotesIcons"/>
+      <ComponentRef Id="Cmp_TimekeeperIcons"/>
+      <ComponentRef Id="Cmp_LibCore"/>
+      <ComponentRef Id="Cmp_LibTT"/>
+      <ComponentRef Id="Cmp_LibTT_UI"/>
+      <ComponentRef Id="Cmp_Core"/>
+	  <ComponentRef Id="Cmp_CleanupRoot"/>
+    </ComponentGroup>
+
+  </Fragment>
+</Wix>

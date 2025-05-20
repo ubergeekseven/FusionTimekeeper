@@ -1,0 +1,8 @@
+G:\FusionTimekeeper\dist\FusionTimeKeeperInstaller\bin\x64\Debug\FusionTimekeeperInstaller.msi
+G:\FusionTimekeeper\dist\FusionTimeKeeperInstaller\bin\x64\Debug\cab1.cab
+G:\FusionTimekeeper\dist\FusionTimeKeeperInstaller\bin\x64\Debug\FusionTimekeeperInstaller.wixpdb
+G:\FusionTimekeeper\dist\FusionTimeKeeperInstaller\obj\x64\Debug\FusionTimekeeperInstaller.wixproj.CoreCompileInputs.cache
+G:\FusionTimekeeper\dist\FusionTimeKeeperInstaller\obj\x64\Debug\cab1.cab
+G:\FusionTimekeeper\dist\FusionTimeKeeperInstaller\obj\x64\Debug\FusionTimekeeperInstaller.msi
+G:\FusionTimekeeper\dist\FusionTimeKeeperInstaller\obj\x64\Debug\FusionTimekeeperInstaller.wixpdb
+G:\FusionTimekeeper\dist\FusionTimeKeeperInstaller\obj\x64\Debug\FusionTimekeeperInstaller.wixproj.BindTracking-neutral.txt

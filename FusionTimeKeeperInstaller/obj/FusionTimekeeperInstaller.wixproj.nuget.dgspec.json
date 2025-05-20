@@ -1,0 +1,45 @@
+{
+  "format": 1,
+  "restore": {
+    "G:\\FusionTimekeeper\\dist\\FusionTimeKeeperInstaller\\FusionTimekeeperInstaller.wixproj": {}
+  },
+  "projects": {
+    "G:\\FusionTimekeeper\\dist\\FusionTimeKeeperInstaller\\FusionTimekeeperInstaller.wixproj": {
+      "version": "1.0.0",
+      "restore": {
+        "projectUniqueName": "G:\\FusionTimekeeper\\dist\\FusionTimeKeeperInstaller\\FusionTimekeeperInstaller.wixproj",
+        "projectName": "FusionTimekeeperInstaller",
+        "projectPath": "G:\\FusionTimekeeper\\dist\\FusionTimeKeeperInstaller\\FusionTimekeeperInstaller.wixproj",
+        "packagesPath": "C:\\Users\\Tech\\.nuget\\packages\\",
+        "outputPath": "G:\\FusionTimekeeper\\dist\\FusionTimeKeeperInstaller\\obj\\",
+        "projectStyle": "PackageReference",
+        "UsingMicrosoftNETSdk": false,
+        "configFilePaths": [
+          "C:\\Users\\Tech\\AppData\\Roaming\\NuGet\\NuGet.Config"
+        ],
+        "originalTargetFrameworks": [
+          "wix600"
+        ],
+        "sources": {
+          "https://api.nuget.org/v3/index.json": {}
+        },
+        "frameworks": {
+          "native": {
+            "targetAlias": "wix600",
+            "projectReferences": {}
+          }
+        },
+        "restoreAuditProperties": {
+          "enableAudit": "true",
+          "auditLevel": "low",
+          "auditMode": "direct"
+        }
+      },
+      "frameworks": {
+        "native": {
+          "targetAlias": "wix600"
+        }
+      }
+    }
+  }
+}
